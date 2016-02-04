@@ -1,0 +1,5528 @@
+Index: conf/atcommand_athena.conf
+===================================================================
+--- conf/atcommand_athena.conf	(revision 747)
++++ conf/atcommand_athena.conf	(working copy)
+@@ -143,6 +143,16 @@
+ // Set Font
+ font: 1,1
+ 
++// == Complete Faction System [Lilith] ==
++//Return character to Faction home location
++home:1,1
++
++//Vote for faction leader
++vote:1,1
++
++//Announce to all faction members (Faction Leader feature)
++factionannounce:1,1
++
+ //---------------------------
+ // 10: Super player+ commands
+ 
+@@ -658,7 +668,23 @@
+ // Resets player skills
+ skreset: 60,60
+ 
++// == Complete Faction System [Lilith] ==
++//Set faction
++setfaction: 60,60
+ 
++//FvF on
++fvfon:60,60
++
++//FvF off
++fvfoff:60,60
++
++//Spawn faction monster
++factionmonster:60,60
++
++//Set faction leader
++factionleader:60,60
++
++
+ //----------------------
+ // 80: GM Chief commands
+ 
+@@ -812,6 +838,10 @@
+ // Stop all weather effects
+ clearweather: 99,99
+ 
++// == Complete Faction System [Lilith] ==
++//Reloading faction data bases
++reloadfactiondb:99,99
++
+ //---------------------------------------------------------------
+ // 100: Disabled commands
+ 
+Index: conf/battle/faction.conf
+===================================================================
+--- conf/battle/faction.conf	(revision 0)
++++ conf/battle/faction.conf	(working copy)
+@@ -0,0 +1,112 @@
++//--------------------------------------------------------------
++// Faction system configuration file [Lilith]
++// Ported from rAthena [15peaces]
++//--------------------------------------------------------------
++// Note 1: Value is a config switch (on/off, yes/no or 1/0)
++// Note 2: Value is in percents (100 means 100%)
++// Note 3: Value is a bit field. If no description is given,
++//         assume unit types (1: Pc, 2: Mob, 4: Pet, 8: Homun, 16: Mercenary, 128: NPC, 512: Elemental)
++//--------------------------------------------------------------
++
++// What unit type can receive faction status (race, element...) Note 3
++// 539 = PC(1) + MOB(2) + HOM(8) + MER(16) + ELEM(512) (Default)
++faction_status_bl: 539
++
++// Can faction monsters attack non-faction monsters? (Note. 1)  
++fvf_monster_ai: yes
++
++// Faction chat settings.
++// 1 = Colored messages
++// 2 = Hide names from other factions (except Alliance)
++// 3 = 1+2 (Default)
++faction_chat_settings: 3
++
++// Start FvF mapflag on all maps? (Note. 1)
++fvf_in_all_maps: yes
++
++// Display HP bar in the same factions? (Note. 1)
++fvf_hp_bar: yes
++
++// Damage adjustment settings, these follow the same logic as their WoE counterparts (see guild.conf)
++fvf_short_attack_damage_rate: 80
++fvf_long_attack_damage_rate: 80
++fvf_weapon_attack_damage_rate: 60
++fvf_magic_attack_damage_rate: 60
++fvf_misc_attack_damage_rate: 60
++
++// Change this to define the minimum level players can fight in FvF
++fvf_min_lvl: 55
++
++// Display unit's faction size? (visual effect)
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++fvf_visual_size: 1
++
++// Unit type for setting 'fvf_visual_size'. (Note 3 except Mercenaries)
++// 527 = PC(1) + MOB(2) + PET(4) + HOM(8) + ELEM(512) (Default)
++faction_size_bl: 527
++
++// Display faction aura?
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++faction_aura_settings: 1
++
++// What unit type can receive 'faction_aura_settings'. (Note 3)
++// 671 = PC(1) + MOB(2) + PET(4) + HOM(8) + MER(16) + NPC(128) + ELEM(512) (Default)
++faction_aura_bl: 671
++
++// What unit type can display 'enemy' over head?
++// 539 = PC(1) + MOB(2) + HOM(8) + MER(16) + ELEM(512) (Default)
++// 0 = disable swords over head and enable faction icons (see db/faction_emblem/)
++faction_ally_info_bl: 539
++
++// Faction leader message color ( @factionannounce <message> )
++// 0xRRGGBB
++chat_leader: 0xFF66FF
++
++// Should the player's dye change own color?
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++fvf_change_ccolor: 1
++
++// Can the faction with race or element Undead/Demon use healing skills to oneself ? (Note 1)
++// 0 - disable
++// 1 - Only same faction members (Default)
++// 2 - Alliance faction members
++faction_heal_settings: 1
++
++// What unit type can receive 'faction_heal_settings'. (Note 3)
++// 19 = PC(1) + MOB(2) + MER(16) (Default)
++faction_heal_bl: 19
++
++// Faction party settings:
++// 0 - Allow members to talk with NPC in same faction (Default)
++// 1 - Allow members from alliance to talk with NPC
++// 2 - No restrictions
++faction_npc_settings: 0
++
++// Faction party settings:
++// 0 - Allow members in same faction to join same party (Default)
++// 1 - Allow faction members from alliance to join same party
++// 2 - No restrictions
++faction_party_settings: 0
++
++// Faction guild settings:
++// 0 - Allow members in same faction to join same guild (Default)
++// 1 - Allow faction members from alliance to join same guild
++// 2 - No restrictions
++faction_guild_settings: 0
++
++// Faction trade settings:
++// 0 - Allow members in same faction to trade (Default)
++// 1 - Allow faction members from alliance to trade
++// 2 - No restrictions
++faction_trade_settings: 0
++
++// Max Discount & overcharge settings ( percentage )
++// By default: max discount is -100%, overcharge is 100%
++faction_disc_min: -100
++faction_disc_max: 100
+\ No newline at end of file
+Index: conf/log_athena.conf
+===================================================================
+--- conf/log_athena.conf	(revision 747)
++++ conf/log_athena.conf	(working copy)
+@@ -85,12 +85,13 @@
+ // 0 = Don't log at all
+ // 1 = Log EVERYTHING!
+ // Advanced Filter Bits: ||
+-// 02 - Log Global messages
+-// 04 - Log Whisper messages
+-// 08 - Log Party messages
+-// 16 - Log Guild messages
+-// 32 - Log Main chat messages
+-// 64 - Don't log anything when WOE is on
++// 002 - Log Global messages
++// 004 - Log Whisper messages
++// 008 - Log Party messages
++// 016 - Log Guild messages
++// 032 - Log Main chat messages
++// 064 - Log Faction chat messages
++// 128 - Don't log anything when WOE is on
+ // Example:
+ // log_chat: 12 = logs both Whisper & Party messages
+ // log_chat: 16 = logs only Guild messages
+Index: conf/mapflag/nofvf.txt
+===================================================================
+--- conf/mapflag/nofvf.txt	(revision 0)
++++ conf/mapflag/nofvf.txt	(working copy)
+@@ -0,0 +1,268 @@
++//--------------------------------------------------------------
++// Faction system configuration file [Lilith]
++// Ported from rAthena [15peaces]
++// Mapflag: Disable Faction versus Faction mode.
++//--------------------------------------------------------------
++
++1@cata	mapflag	fvf	off
++2@cata	mapflag	fvf	off
++1@nyd	mapflag	fvf	off
++2@nyd	mapflag	fvf	off
++1@orcs	mapflag	fvf	off
++2@orcs	mapflag	fvf	off
++1@tower	mapflag	fvf	off
++2@tower	mapflag	fvf	off
++3@tower	mapflag	fvf	off
++4@tower	mapflag	fvf	off
++5@tower	mapflag	fvf	off
++6@tower	mapflag	fvf	off
++1@mist	mapflag	fvf	off
++1@cash	mapflag	fvf	off
++1@pump	mapflag	fvf	off
++2@pump	mapflag	fvf	off
++1@lhz	mapflag	fvf	off
++1@ma_h	mapflag	fvf	off
++1@ma_c	mapflag	fvf	off
++1@ma_b	mapflag	fvf	off
++1@ecl	mapflag	fvf	off
++
++bat_a01	mapflag	fvf	off
++bat_a02	mapflag	fvf	off
++bat_b01	mapflag	fvf	off
++bat_b02	mapflag	fvf	off
++bat_c01	mapflag	fvf	off
++bat_c02	mapflag	fvf	off
++bat_c03	mapflag	fvf	off
++
++guild_vs1	mapflag	fvf	off
++guild_vs2	mapflag	fvf	off
++guild_vs3	mapflag	fvf	off
++guild_vs4	mapflag	fvf	off
++guild_vs5	mapflag	fvf	off
++
++ayo_in01	mapflag	fvf	off
++ayo_in02	mapflag	fvf	off
++alberta_in	mapflag	fvf	off
++alberta	mapflag	fvf	off
++alde_alche	mapflag	fvf	off
++aldeba_in	mapflag	fvf	off
++aldebaran	mapflag	fvf	off
++ama_in01	mapflag	fvf	off
++ama_in02	mapflag	fvf	off
++amatsu	mapflag	fvf	off
++cmd_in01	mapflag	fvf	off
++cmd_in02	mapflag	fvf	off
++comodo	mapflag	fvf	off
++gef_tower	mapflag	fvf	off
++geffen	mapflag	fvf	off
++geffen_in	mapflag	fvf	off
++gon_in	mapflag	fvf	off
++gonryun	mapflag	fvf	off
++gon_test	mapflag	fvf	off
++in_hunter	mapflag	fvf	off
++in_moc_16	mapflag	fvf	off
++in_orcs01	mapflag	fvf	off
++izlude_in	mapflag	fvf	off
++izlude	mapflag	fvf	off
++hugel	mapflag	fvf	off
++hu_in01	mapflag	fvf	off
++lighthalzen	mapflag	fvf	off
++lhz_airport	mapflag	fvf	off
++lhz_in01	mapflag	fvf	off
++lhz_in02	mapflag	fvf	off
++lhz_in03	mapflag	fvf	off
++louyang	mapflag	fvf	off
++lou_in01	mapflag	fvf	off
++lou_in02	mapflag	fvf	off
++moc_castle	mapflag	fvf	off
++monk_in	mapflag	fvf	off
++morocc_in	mapflag	fvf	off
++morocc	mapflag	fvf	off
++mosk_in	mapflag	fvf	off
++nif_in	mapflag	fvf	off
++payon_in01	mapflag	fvf	off
++payon_in02	mapflag	fvf	off
++payon_in03	mapflag	fvf	off
++payon	mapflag	fvf	off
++pay_arche	mapflag	fvf	off
++prt_are_in	mapflag	fvf	off
++prt_are01	mapflag	fvf	off
++prt_castle	mapflag	fvf	off
++prt_church	mapflag	fvf	off
++prt_in	mapflag	fvf	off
++prontera	mapflag	fvf	off
++sec_in01	mapflag	fvf	off
++job_sword1	mapflag	fvf	off
++um_in	mapflag	fvf	off
++umbala	mapflag	fvf	off
++xmas_in	mapflag	fvf	off
++xmas	mapflag	fvf	off
++yuno_in01	mapflag	fvf	off
++yuno_in03	mapflag	fvf	off
++yuno_in04	mapflag	fvf	off
++yuno_in05	mapflag	fvf	off
++yuno	mapflag	fvf	off
++yuno_pre	mapflag	fvf	off
++y_airport	mapflag	fvf	off
++rachel	mapflag	fvf	off
++ra_in01	mapflag	fvf	off
++ra_temin	mapflag	fvf	off
++airplane	mapflag	fvf	off
++airport	mapflag	fvf	off
++einbech	mapflag	fvf	off
++einbroch	mapflag	fvf	off
++ein_in01	mapflag	fvf	off
++ayothaya	mapflag	fvf	off
++veins	mapflag	fvf	off
++ve_in	mapflag	fvf	off
++ve_in02	mapflag	fvf	off
++cave	mapflag	fvf	off
++
++e_tower	mapflag	fvf	off
++
++mid_camp	mapflag	fvf	off
++mid_campin	mapflag	fvf	off
++man_fild01	mapflag	fvf	off
++moc_fild22b	mapflag	fvf	off
++que_dan01	mapflag	fvf	off
++que_dan02	mapflag	fvf	off
++schg_que01	mapflag	fvf	off
++arug_que01	mapflag	fvf	off
++
++bat_room	mapflag	fvf	off
++
++manuk	mapflag	fvf	off
++man_in01	mapflag	fvf	off
++splendide	mapflag	fvf	off
++spl_in01	mapflag	fvf	off
++spl_in02	mapflag	fvf	off
++
++moc_para01	mapflag	fvf	off
++
++brasilis	mapflag	fvf	off
++bra_in01	mapflag	fvf	off
++
++dicastes01	mapflag	fvf	off
++dicastes02	mapflag	fvf	off
++dic_in01	mapflag	fvf	off
++
++s_atelier	mapflag	fvf	off
++
++mora	mapflag	fvf	off
++
++dewata	mapflag	fvf	off
++dew_in01	mapflag	fvf	off
++
++malangdo	mapflag	fvf	off
++mal_in01	mapflag	fvf	off
++mal_in02	mapflag	fvf	off
++
++malaya	mapflag	fvf	off
++ma_scene01	mapflag	fvf	off
++ma_in01	mapflag	fvf	off
++
++eclage	mapflag	fvf	off
++ecl_in01	mapflag	fvf	off
++ecl_in02	mapflag	fvf	off
++ecl_in03	mapflag	fvf	off
++ecl_in04	mapflag	fvf	off
++ecl_hub01	mapflag	fvf	off
++
++//evt_zombie	mapflag	fvf	off
++
++// GvG Arenas =============
++guild_vs1	mapflag	fvf	off
++guild_vs2	mapflag	fvf	off
++guild_vs3	mapflag	fvf	off
++guild_vs4	mapflag	fvf	off
++guild_vs5	mapflag	fvf	off
++
++sec_pri	mapflag	fvf	off
++
++// PvP ========================
++pvp_y_1-1	mapflag	fvf	off
++pvp_y_1-2	mapflag	fvf	off
++pvp_y_1-3	mapflag	fvf	off
++pvp_y_1-4	mapflag	fvf	off
++pvp_y_1-5	mapflag	fvf	off
++pvp_y_2-1	mapflag	fvf	off
++pvp_y_2-2	mapflag	fvf	off
++pvp_y_2-3	mapflag	fvf	off
++pvp_y_2-4	mapflag	fvf	off
++pvp_y_2-5	mapflag	fvf	off
++pvp_y_3-1	mapflag	fvf	off
++pvp_y_3-2	mapflag	fvf	off
++pvp_y_3-3	mapflag	fvf	off
++pvp_y_3-4	mapflag	fvf	off
++pvp_y_3-5	mapflag	fvf	off
++pvp_y_4-1	mapflag	fvf	off
++pvp_y_4-2	mapflag	fvf	off
++pvp_y_4-3	mapflag	fvf	off
++pvp_y_4-4	mapflag	fvf	off
++pvp_y_4-5	mapflag	fvf	off
++pvp_y_5-1	mapflag	fvf	off
++pvp_y_5-2	mapflag	fvf	off
++pvp_y_5-3	mapflag	fvf	off
++pvp_y_5-4	mapflag	fvf	off
++pvp_y_5-5	mapflag	fvf	off
++pvp_y_6-1	mapflag	fvf	off
++pvp_y_6-2	mapflag	fvf	off
++pvp_y_6-3	mapflag	fvf	off
++pvp_y_6-4	mapflag	fvf	off
++pvp_y_6-5	mapflag	fvf	off
++pvp_y_7-1	mapflag	fvf	off
++pvp_y_7-2	mapflag	fvf	off
++pvp_y_7-3	mapflag	fvf	off
++pvp_y_7-4	mapflag	fvf	off
++pvp_y_7-5	mapflag	fvf	off
++pvp_y_8-1	mapflag	fvf	off
++pvp_y_8-2	mapflag	fvf	off
++pvp_y_8-3	mapflag	fvf	off
++pvp_y_8-4	mapflag	fvf	off
++pvp_y_8-5	mapflag	fvf	off
++pvp_n_1-1	mapflag	fvf	off
++pvp_n_1-2	mapflag	fvf	off
++pvp_n_1-3	mapflag	fvf	off
++pvp_n_1-4	mapflag	fvf	off
++pvp_n_1-5	mapflag	fvf	off
++pvp_n_2-1	mapflag	fvf	off
++pvp_n_2-2	mapflag	fvf	off
++pvp_n_2-3	mapflag	fvf	off
++pvp_n_2-4	mapflag	fvf	off
++pvp_n_2-5	mapflag	fvf	off
++pvp_n_3-1	mapflag	fvf	off
++pvp_n_3-2	mapflag	fvf	off
++pvp_n_3-3	mapflag	fvf	off
++pvp_n_3-4	mapflag	fvf	off
++pvp_n_3-5	mapflag	fvf	off
++pvp_n_4-1	mapflag	fvf	off
++pvp_n_4-2	mapflag	fvf	off
++pvp_n_4-3	mapflag	fvf	off
++pvp_n_4-4	mapflag	fvf	off
++pvp_n_4-5	mapflag	fvf	off
++pvp_n_5-1	mapflag	fvf	off
++pvp_n_5-2	mapflag	fvf	off
++pvp_n_5-3	mapflag	fvf	off
++pvp_n_5-4	mapflag	fvf	off
++pvp_n_5-5	mapflag	fvf	off
++pvp_n_6-1	mapflag	fvf	off
++pvp_n_6-2	mapflag	fvf	off
++pvp_n_6-3	mapflag	fvf	off
++pvp_n_6-4	mapflag	fvf	off
++pvp_n_6-5	mapflag	fvf	off
++pvp_n_7-1	mapflag	fvf	off
++pvp_n_7-2	mapflag	fvf	off
++pvp_n_7-3	mapflag	fvf	off
++pvp_n_7-4	mapflag	fvf	off
++pvp_n_7-5	mapflag	fvf	off
++pvp_n_8-1	mapflag	fvf	off
++pvp_n_8-2	mapflag	fvf	off
++pvp_n_8-3	mapflag	fvf	off
++pvp_n_8-4	mapflag	fvf	off
++pvp_n_8-5	mapflag	fvf	off
++pvp_2vs2	mapflag	fvf	off
++
++//Aldebaran Turbo Track
++turbo_e_4	mapflag	fvf	off
++turbo_e_8	mapflag	fvf	off
++turbo_e_16	mapflag	fvf	off
+\ No newline at end of file
+Index: conf/msg_athena.conf
+===================================================================
+--- conf/msg_athena.conf	(revision 747)
++++ conf/msg_athena.conf	(working copy)
+@@ -593,5 +593,64 @@
+ 715: You mounted on a Gryphon.
+ 716: Your already mounted on a Gryphon.
+ 
++// Complete Faction System [Lilith]
++// Ported from rAthena [15peaces]
++//800: You can't use Faction chat while muted.
++//801: Faction chat already activated.
++//802: Faction chat already disabled.
++803: Faction system has been reloaded
++//804: Faction chat currently enabled. Usage: @factionchat <on|off>, @factionchat <message>.
++//805: Faction chat has been activated.
++//806: Faction chat has been disabled.
++807: You're not in faction.
++//808: [%s] : %s
++//809: [%s](Leader) : %s
++810: FvF On | 
++811: Faction System disabled.
++812: FvF: On
++813: FvF is already on
++814: FvF: Off
++815: FvF is already off
++816: Unknown faction ID
++817: Now you're in faction: %s
++818: FvF Flags: 
++819: Faction ID: %d | 
++820: [Faction Leader] %s : %s
++821: Leader of Faction %d:%s is now '%s'
++822: Give the faction ID, display name or monster name/id please.
++823: Voting for your faction leader not started.
++824: You already voted.
++825: Usage: @vote <Character Name>.
++826: Player is not in your faction.
++827: You cannot vote for yourself.
++828: Usage: @setfaction <Faction ID>.
++829: Your Faction haven't home location.
++830: You voted for '%s' as a faction leader.
++//831: Faction chat currently disabled. Usage: @factionchat <on|off>, @factionchat <message>.
++832: You cannot invite to party of members of the other faction.
++833: You cannot invite to party non-alliance faction members.
++834: You cannot invite to guild of members of the other faction.
++835: You cannot invite to guild non-alliance faction members.
++836: You cannot use NPC of other factions.
++837: You cannot use NPC of non-alliance faction.
++838: Usage: @factionannounce <message>.
++839: You're not a Faction Leader.
++840: You're not in a faction now.
++841: Relic ID: %d |
++//842: You can't use Alliance chat while muted.
++//843: Alliance chat already activated.
++//844: Alliance chat already disabled.
++//845: Alliance chat currently enabled. Usage: @alliancechat <on|off>, @alliancechat <message>.
++//846: Alliance chat currently enabled. Usage: @alliancechat <on|off>, @alliancechat <message>.
++//847: Alliance chat has been activated.
++//848: Alliance chat has been disabled.
++849: %s [%s] : %s
++850: %s [%s](Leader) : %s
++//851: You should enable faction chat with "@factionchat on" command.
++//852: You should enable alliance chat with "@alliancechat on" command.
++853: You can't trade with other faction members.
++854: You can't trade with non-alliance faction members.
++855: %s failed. Player not found.
++
+ //Custom translations
+ import: conf/import/msg_conf.txt
+Index: db/const.txt
+===================================================================
+--- db/const.txt	(revision 747)
++++ db/const.txt	(working copy)
+@@ -380,6 +380,7 @@
+ mf_monster_noteleport	49
+ mf_pvp_nocalcrank	50
+ mf_battleground	51
++mf_fvf	59
+ 
+ cell_walkable	0
+ cell_shootable	1
+@@ -389,6 +390,7 @@
+ cell_landprotector	5
+ cell_novending	6
+ cell_nochat	7
++cell_nofvf	10
+ 
+ //cell_gettype	0
+ cell_chkwall	1
+@@ -404,6 +406,7 @@
+ cell_chklandprotector	11
+ cell_chknovending	12
+ cell_chknochat	13
++cell_chknofvf	16
+ 
+ StatusPoint	9	1
+ BaseLevel	11	1
+@@ -429,6 +432,7 @@
+ BaseClass	120	1
+ killerrid	121 1
+ killedrid	122 1
++Faction	123	1
+ 
+ bMaxHP	6
+ bMaxSP	8
+Index: db/faction_alliance.txt
+===================================================================
+--- db/faction_alliance.txt	(revision 0)
++++ db/faction_alliance.txt	(working copy)
+@@ -0,0 +1,5 @@
++// Faction ID, Alliance Faction ID{: Alliance Faction ID{:...}}
++// Faction ID 1 have alliance with IDs: 2, 3, 4
++1,2:3:4
++// Faction ID 3 have alliance with ID 4
++3,4
+\ No newline at end of file
+Index: db/faction_db.txt
+===================================================================
+--- db/faction_db.txt	(revision 0)
++++ db/faction_db.txt	(working copy)
+@@ -0,0 +1,31 @@
++// Complete Faction System [Lilith]
++// Ported from rAthena [15peaces]
++// ID,Faction Name,Faction Player name,Location,X,Y,Race,Element,Element lvl,Size,Clothes Color,Color of mes,{ Aura: #1 #2 #3 },{ Script Bonus },{ Faction Aura Script Bonus }
++// * ID: Faction ID
++// * Faction Name: Faction Name
++// * Faction Player name: Player's name on FvF maps
++// * Location: Faction Location (home)
++// * X: X coordinate for faction location
++// * Y: Y coordinate for faction location
++// * Race: 
++//		0 = Formless, 1 = Undead, 2 = Brute, 3 = Plant, 4 = Insect,
++//		5 = Fish, 6 = Demon, 7 = Demi-Human, 8 = Angel, 9 = Dragon
++// * Element:
++//		0 = Neutral, 1 = Water, 2 = Earth, 3 = Fire, 4 = Wind,
++//		5 = Poison, 6 = Holy, 7 = Dark, 8 = Spirit, 9 = Undead
++// * Element lvl: 1 ~ 4
++// * Size: 1 - small, 0 - normal, 2 - big
++// * Clothes Color: Dye color
++// * Color of messages (0xRRGGBB): Ex. 0xFF0000 - red
++// * { Aura } : see doc/effect_list.txt
++// * { Script Bonus } : Script Bonus for each faction
++// * { Faction Aura Bonus } : Script bonus for faction aura around faction leader like guild master's aura 
++
++// Faction ID: 1
++1,Paradise,Angel,gonryun,0,0,8,6,1,1,0,0x6495ED,{ #240 #418 },{ bonus bInt,3; },{ bonus bInt,30; }
++// Faction ID: 2
++2,Forest,Elf,payon,0,0,7,0,1,0,1,0x7CFC00,{ #678 #679 #680 },{ bonus bDex,3; },{ bonus bDex,30; }
++// Faction ID: 3
++3,Hell,Demon,morocc,0,0,1,9,1,2,2,0xFF3030,{ #239 #485 },{ bonus bStr,3; },{ bonus bStr,30; }
++// Faction ID: 4
++4,Earth,Human,prontera,155,180,7,0,1,0,3,0xEE82EE,{ #200 #201 },{ bonus bLuk,3; },{ bonus bLuk,30; }
+\ No newline at end of file
+Index: db/skill_db.txt
+===================================================================
+--- db/skill_db.txt	(revision 747)
++++ db/skill_db.txt	(working copy)
+@@ -37,6 +37,7 @@
+ //    0x0800- usable only on guild-mates (and enemies if skill is offensive)
+ //    0x1000- disable usage on enemies (for non-offensive skills).
+ //    0x2000- chorus skill
++//    0x8000- faction skill
+ // 13 maxcount: max amount of skill instances to place on the ground when
+ //    player_land_skill_limit/monster_land_skill_limit is enabled. For skills
+ //    that attack using a path, this is the path length to be used.
+@@ -1516,3 +1517,5 @@
+ 10014,0,0,0,0,0,0,1,0,no,0,0x10,0,none,0,	GD_DEVELOPMENT,Permanent Development
+ 10015,0,0,4,0,0x3,0,3,0,yes,0,0x10,0,none,0,	GD_ITEMEMERGENCYCALL,Item Emergency Call
+ 10016,0,0,0,0,0,0,5,0,no,0,0x10,0,none,0,	GD_GUILD_STORAGE,Guild Storage
++
++10020,0,0,4,0,0x3,15,1,0,yes,0,0x8000,0,none,0,	FACTION_AURA,Faction Aura
+\ No newline at end of file
+Index: db/skill_unit_db.txt
+===================================================================
+--- db/skill_unit_db.txt	(revision 747)
++++ db/skill_unit_db.txt	(working copy)
+@@ -165,4 +165,6 @@
+ 8403,0xed,    , -1, 1,1000,enemy, 0x018 //EL_FIRE_MANTLE
+ 8406,0xee,    ,  0, 1,  -1,friend,0x018	//EL_WATER_BARRIER
+ 8409,0xef,    ,  0, 1,  -1,friend,0x018	//EL_ZEPHYR
+-8412,0xf0,    ,  0, 1,  -1,friend,0x018	//EL_POWER_OF_GAIA
+\ No newline at end of file
++8412,0xf0,    ,  0, 1,  -1,friend,0x018	//EL_POWER_OF_GAIA
++
++10020,0x189,   ,  5, 0,  -1,faction, 0x040	//FACTION_AURA
+\ No newline at end of file
+Index: doc/script_commands.txt
+===================================================================
+--- doc/script_commands.txt	(revision 747)
++++ doc/script_commands.txt	(working copy)
+@@ -313,7 +313,7 @@
+ 
+ ** Create a permanent monster spawn:
+ 
+-<map name>,<x>,<y>,<xs>,<ys>%TAB%monster%TAB%<monster name>%TAB%<mob id>,<amount>,<delay1>,<delay2>,<event>
++<map name>,<x>,<y>,<xs>,<ys>[,<Faction ID>]%TAB%monster%TAB%<monster name>%TAB%<mob id>,<amount>,<delay1>,<delay2>,<event>
+ 
+ Map name is the name of the map the monsters will spawn on. x,y are the
+ coordinates where the mob should spawn. If xs and ys are non-zero, they
+@@ -322,6 +322,9 @@
+ Note this is only the initial spawn zone, as mobs random-walk, they are free
+ to move away from their specified spawn region.
+ 
++Faction ID is optional parameter. If faction id was given permanent monster
++would have a faction id.
++
+ Monster name is the name the monsters will have on screen, and has no relation 
+ whatsoever to their names anywhere else. It's the mob id that counts, which 
+ identifies monster record in 'mob_db.txt' database of monsters. If the mob name 
+@@ -402,8 +405,8 @@
+ 
+ ** Define an NPC object.
+ 
+-<map name>,<x>,<y>,<facing>%TAB%script%TAB%<NPC Name>%TAB%<sprite id>,{<code>}
+-<map name>,<x>,<y>,<facing>%TAB%script%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>,{<code>}
++<map name>,<x>,<y>,<facing>[,<Faction ID>]%TAB%script%TAB%<NPC Name>%TAB%<sprite id>,{<code>}
++<map name>,<x>,<y>,<facing>[,<Faction ID>]%TAB%script%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>,{<code>}
+ 
+ This will place an NPC object on a specified map at the specified location, and 
+ is a top-level command you will use the most in your custom scripting. The NPCs 
+@@ -417,6 +420,8 @@
+ towards the bottom of the map, you use facing 4, and to make it look southeast 
+ it's facing 5.)
+ 
++Faction ID is optional parameter. If faction id was given NPC would have a faction id.
++
+ Sprite id is the sprite number used to display this particular NPC. For a full 
+ list of sprite id numbers see http://kalen.s79.xrea.com/npc/npce.shtml You may 
+ also use a monster's ID number instead to display a monster sprite for this NPC. 
+@@ -453,7 +458,8 @@
+ ** Define a shop/cashshop NPC.
+ 
+ -%TAB%shop%TAB%<NPC Name>%TAB%<sprite id>,<itemid>:<price>{,<itemid>:<price>...}
+-<map name>,<x>,<y>,<facing>%TAB%shop%TAB%<NPC Name>%TAB%<sprite id>,<itemid>:<price>{,<itemid>:<price>...}
++-[,<Faction ID>:<Discount>...]%TAB%shop%TAB%<NPC Name>%TAB%<sprite id>,<itemid>:<price>{,<itemid>:<price>...}
++<map name>,<x>,<y>,<facing>{,<Faction ID>[,<Faction ID>:<Discount>...]}%TAB%shop%TAB%<NPC Name>%TAB%<sprite id>,<itemid>:<price>{,<itemid>:<price>...}
+ 
+ This will define a shop NPC, which, when triggered (which can only be done by 
+ clicking) will cause a shop window to come up. No code whatsoever runs in shop 
+@@ -461,6 +467,8 @@
+ itself. (No variables even exist at this point of scripting, so don't even 
+ bother trying to use them.)
+ 
++Faction ID is optional parameter. If faction id was given Shop would have a faction id.
++
+ The item id is the number of item in the 'item_db.txt' database. If Price is set 
+ to -1, the 'buy price' given in the item database will be used. Otherwise, the 
+ price you gave will be used for this item, which is how you create differing 
+@@ -477,9 +485,9 @@
+ 
+ warp: <map name>,<x>,<y>,<facing>%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<spanx>,<spany>
+ shop/cashshop/npc: -%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>
+-shop/cashshop/npc: <map name>,<x>,<y>,<facing>%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>
++shop/cashshop/npc: <map name>,<x>,<y>,<facing>[,<Faction ID>]%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>
+ npc: -%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
+-npc: <map name>,<x>,<y>,<facing>%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
++npc: <map name>,<x>,<y>,<facing>[,<Faction ID>]%TAB%duplicate(<label>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
+ 
+ This will duplicate an warp/shop/cashshop/NPC referred to by 'label'.
+ Warp duplicates inherit the target location.
+@@ -2167,6 +2175,7 @@
+  1 - The name of the party they're in if any.
+  2 - The name of the guild they're in if any.
+  3 - The name of the map the character is in.
++ 4 - The name of the faction unit the character is in.
+  
+ If a character is not a member of any party or guild, an empty string will be 
+ returned when requesting that information.
+@@ -2272,6 +2281,7 @@
+  2 - Guild ID number.
+  3 - Account ID number.
+  4 - Battle ground ID
++ 5 - Faction ID
+ 
+ For most purposes other than printing it, a number is better to have than a name 
+ (people do horrifying things to their character names).
+@@ -2296,6 +2306,7 @@
+ to retrieve and can be one of the following:
+ 
+     0 - Unit ID (GID)
++	1 - Faction ID
+ 
+ If an invalid type is given or the NPC does not exist, return value
+ is 0.
+@@ -7445,6 +7456,213 @@
+ 
+ ----------------------------------------
+ 
++*factioninfo(<Faction ID>,<Type>{,<Val>});
+ 
++Retrieves information about faction.
++'Type' specifies what information to retrieve and can be one of the following:
++
++	0			-	Faction's name
++	1			-	Player's name
++	2			-	Location (@home)
++	3			-	X Coordinate
++	4			-	Y Coordinate
++	5			-	Race
++	6			-	Element
++	7			-	Element lvl
++	8			-	Size
++	9			-	Clothes Color
++	10			-	Voting State
++	11 + Val	-	Alliance ID
++	12 + Val	-	Aura ID
++
++'Val' may be:
++	between 0 and MAX_FACTION_ALLIANCE if Type is 11
++	between 0 and MAX_AURA_EFF if Type is 12
++	see faction.h
++
++Example:
++
++	// Information about Character's faction race
++	mes "Your race number is: "+factioninfo(getcharid(5),5);
++
++	// Information about Character's faction auras
++	for( .@i = 0; .@i < 3; .@i++ )
++		mes "Your ﾃ｢窶樞�"+.@i+" aura is: "+factioninfo(getcharid(5),12,.@i);
++
++---------------------------------------
++
++*setfaction(<Faction ID>{,<Char ID>});
++
++This command sets the Faction for the attached or given Character ID.
++
++---------------------------------------
++
++*setfactionleader(<Faction ID>,<Char ID>);
++
++This command sets the Faction leader attached or given Character ID.
++
++---------------------------------------
++
++*relicadd(<Faction ID>,<Item ID>,<Slot>);
++
++This command adds for Faction Relic (like item bonus) in 'Slot'.
++'Slot' may be between 0 and MAX_RELIC (see faction.h)
++
++Faction members would be receive this bonus if slot is activated
++by 'relicactivate' command.
++
++Example:
++
++	// Add an item 1533(Warrior's Balmung) with bonus { bonus bAllStats,5; }
++	relicadd(getcharid(5),1533,0);
++
++---------------------------------------
++
++*relicgetinfo(<Faction ID>,<Slot>);
++
++Retrieves information about relic in slot.
++
++Example:
++
++	// Information about Faction's Relics
++	for( .@i = 0; .@i < 3; .@i++ )
++		mes "Your ﾃ｢窶樞�"+.@i+" relic is: "+relicgetinfo(getcharid(5),.@i);
++
++---------------------------------------
++
++*relicactivate(<Faction ID>,<Slot>,<Val>);
++
++This command activate the Faction Relic.
++'Val' may be above 0 for activate or 0 for deactivate.
++
++Example:
++
++	// Activate the Faction Relic in Slot 0
++	relicactivate(getcharid(5),0,1);
++
++	// De-activate the Faction Relic in Slot 2
++	relicactivate(getcharid(5),2,0);
++
++---------------------------------------
++
++*relicdel(<Faction ID>,<Slot>);
++
++This command delete the Faction Relic.
++
++Example:
++
++	// Delete the Faction Relic in Slot 1
++	relicdel(getcharid(5),1);
++
++---------------------------------------
++
++*votinginfo(<Faction ID>);
++
++This command will find members of a specified faction who have votes or voted
++and returns their votes/names into an array of temporary global variables.
++
++Upon executing this,
++
++$@voting_charid[] is a global temporary number array which contains all the 
++					character id of these faction members
++
++$@voting_charname$[] is a global temporary string array which contains all the 
++					names these faction members
++
++$@voting_votes[]   is a global temporary number array which contains the 
++					characters's votes of these party members.
++
++$@voting_voted[]   is a global temporary number array which contains the 
++					1 if character voted or 0 if not.
++
++$@votinglist_count   is the number of faction members that were found.
++
++---------------------------------------
++
++*vote(<Char ID>{,<Amount of Votes>});
++
++This command vote for given character ID. Needs attached player.
++By default amount of votes is 1.
++
++---------------------------------------
++
++*addvotes(<Char ID>{,<Amount of Votes>});
++
++This command vote for given character ID. No need attached player.
++By default amount of votes is 1.
++
++---------------------------------------
++
++*votingstart({<Faction ID>});
++
++This command start the voting process for faction.
++If Faction ID not given this start voting for all factions.
++
++Example:
++
++	// Start voting process for faction ID 3
++	votingstart(3);
++
++	// Start voting process for all factions
++	votingstart();
++
++---------------------------------------
++
++*votingstop({<Faction ID>});
++*votingend({<Faction ID>});
++
++This command ends the voting process for faction.
++If Faction ID not given this ends voting for all factions.
++
++Example:
++
++	// End voting process for faction ID 3
++	votingstop(3);
++
++	// End voting process for all factions
++	votingend();
++
++--------------------------------------
++
++*factionmonster(<faction ID>,"<map name>",<x>,<y>,"<name to show>",<mob ID>,<amount>{,"<event label>"});
++*areafactionmonster (<faction ID>,"<map name>",<x1>,<y1>,<x2>,<y2>,"<name to show>",<mob ID>,<amount>{,"<event label>"});
++
++This command will spawn a faction monster with specified amount on the specified coordinates on the specified 
++map. If the script is invoked by a character, a special map name, "this", will 
++be recognized to mean the name of the map the invoking character is located at. 
++This command works fine in the item scripts.
++
++The same command arguments mean the same things as described above in the 
++beginning of this document when talking about permanent monster spawns. Monsters 
++spawned in this manner will not respawn upon being killed.
++
++Unlike the permanent monster spawns, if the mob id is -1, a random monster will 
++be picked from the entire database according to the rules configured in the 
++server for dead branches. This will work for all other kinds of non-permanent 
++monster spawns.
++
++The only very special thing about this command is an event label, which is an 
++optional parameter. This label is written like '<NPC object name>::<label name>' 
++and upon the monster being killed, it will execute the script inside of the 
++specified NPC object starting from the label given. The RID of the player 
++attached at this execution will be the RID of the killing character.
++
++    factionmonster faction_id,"place",60,100,"Poring",1002,1,"NPCNAME::OnLabel";
++
++The coordinates of 0,0 will spawn the monster on a random place on the map.
++
++The 'areafactionmonster' command works much like the 'factionmonster' command
++and is not significantly different, but spawns the monsters within a square
++defined by x1/y1-x2/y2.
++
++---------------------------------------
++
++*fvfon "<map name>"{,Faction ID};
++*fvfoff "<map name>";
++
++These commands will turn FvF mode for the specified maps on and off, setting up 
++appropriate map flags. In FvF mode factions may fight among themselves.
++
++
+ Whew.
+ That's about all of them.
+Index: npc/faction/sample.txt
+===================================================================
+--- npc/faction/sample.txt	(revision 0)
++++ npc/faction/sample.txt	(working copy)
+@@ -0,0 +1,89 @@
++prontera,160,180,3	script	Faction Sample	100,{
++mes "[Faction Sample]", "Hello!", "I'm the sample NPC for faction system script commands";
++next;
++mes "[Faction Sample]", "Let's start...", "Input faction ID 1~4 and i'll make you a faction member";
++next;
++input(@faction_id,1,4);
++mes "[Faction Sample]","You choose '"+factioninfo(@faction_id,0)+"' faction:","What are you want?";
++next;
++L_Menu:
++mes "[Faction Sample]";
++	switch(select("Give me more Info about this faction:Make me a faction member of '"+factioninfo(@faction_id,0)+"':FvF On:FvF Off:Spawn Faction Monster"))
++	{
++		case 1: callsub(S_FACTION_INFO); break;
++		case 2: callsub(S_FACTION_SET); break;
++		case 3: callsub(S_FACTION_FVF_SET,1); break;
++		case 4: callsub(S_FACTION_FVF_SET,0); break;
++		case 5: callsub(S_FACTION_SPAWN); break;
++	}
++close;
++
++S_FACTION_SPAWN:
++	factionmonster(@faction_id,"this",159,180,factioninfo(@faction_id,1),1002,1);
++	close;
++
++S_FACTION_FVF_SET:
++	.@map$ = strnpcinfo(4);
++	.@s = getmapflag(.@map$,mf_fvf);
++	switch(getarg(0))
++	{
++		case 1: if( !.@s ) fvfon(.@map$); break;
++		default: if( .@s ) fvfoff(.@map$); break;
++	}
++	close;
++
++S_FACTION_SET:
++	setfaction(@faction_id);
++	mes "Now you're in Faction '"+factioninfo(@faction_id,0)+"'";
++	next;
++	close;
++
++S_FACTION_INFO:
++	mes "Faction id:" +@faction_id;
++	mes "Name:" +factioninfo(@faction_id,0);
++	mes "Unit name:" +factioninfo(@faction_id,1);
++	mes "Home map:" +factioninfo(@faction_id,2);
++	mes "Home map X:" +factioninfo(@faction_id,3);
++	mes "Home map Y:" +factioninfo(@faction_id,4);
++	mes "Race:" +factioninfo(@faction_id,5);
++	mes "Element:" +factioninfo(@faction_id,6);
++	mes "Element lvl:" +factioninfo(@faction_id,7);
++	mes "Size:" +factioninfo(@faction_id,8);
++	mes "Clothes color:" +factioninfo(@faction_id,9);
++	mes "Voting state:" +factioninfo(@faction_id,10);
++
++	mes "Alliance #1:" +factioninfo(@faction_id,11,0);
++	mes "Alliance #2:" +factioninfo(@faction_id,11,1);
++	mes "Alliance #3:" +factioninfo(@faction_id,11,2);
++
++	mes "Aura effect #1:" +factioninfo(@faction_id,12,0);
++	mes "Aura effect #2:" +factioninfo(@faction_id,12,1);
++	mes "Aura effect #3:" +factioninfo(@faction_id,12,2);
++	next;
++	goto L_Menu;
++}
++
++/**
++ * Example shop
++ * Faction ID = 0, Discount -50% for Faction ID 1, Overcharge 50% for Faction ID 4
++ **/
++prontera,152,180,3,0,[1:-50,4:50]	shop	Example_Shop_0	100,7227:100;
++/**
++ * 'floating' shop
++ **/
++-,[1:15,4:-5,2:30]	shop	Example_Floating	100,7227:100;
++
++/**
++ * Example script
++ * Faction ID = 2
++ **/
++prontera,154,180,3,2	script	Example_Script_2	100,{
++	mes "Hello!";
++	close;
++}
++
++/**
++ * Example duplicate
++ * Duplicate of 'Example_Script_2' but with Faction ID = 3
++ **/
++prontera,156,180,5,3	duplicate(Example_Script_2)	Example_Script_3	100
+\ No newline at end of file
+
+Property changes on: npc/faction/sample.txt
+___________________________________________________________________
+Added: svn:eol-style
+## -0,0 +1 ##
++native
+\ No newline at end of property
+Index: npc/faction/sample.txt
+===================================================================
+--- npc/faction/sample.txt	(revision 0)
++++ npc/faction/sample.txt	(working copy)
+@@ -0,0 +1,89 @@
++prontera,160,180,3	script	Faction Sample	100,{
++mes "[Faction Sample]", "Hello!", "I'm the sample NPC for faction system script commands";
++next;
++mes "[Faction Sample]", "Let's start...", "Input faction ID 1~4 and i'll make you a faction member";
++next;
++input(@faction_id,1,4);
++mes "[Faction Sample]","You choose '"+factioninfo(@faction_id,0)+"' faction:","What are you want?";
++next;
++L_Menu:
++mes "[Faction Sample]";
++	switch(select("Give me more Info about this faction:Make me a faction member of '"+factioninfo(@faction_id,0)+"':FvF On:FvF Off:Spawn Faction Monster"))
++	{
++		case 1: callsub(S_FACTION_INFO); break;
++		case 2: callsub(S_FACTION_SET); break;
++		case 3: callsub(S_FACTION_FVF_SET,1); break;
++		case 4: callsub(S_FACTION_FVF_SET,0); break;
++		case 5: callsub(S_FACTION_SPAWN); break;
++	}
++close;
++
++S_FACTION_SPAWN:
++	factionmonster(@faction_id,"this",159,180,factioninfo(@faction_id,1),1002,1);
++	close;
++
++S_FACTION_FVF_SET:
++	.@map$ = strnpcinfo(4);
++	.@s = getmapflag(.@map$,mf_fvf);
++	switch(getarg(0))
++	{
++		case 1: if( !.@s ) fvfon(.@map$); break;
++		default: if( .@s ) fvfoff(.@map$); break;
++	}
++	close;
++
++S_FACTION_SET:
++	setfaction(@faction_id);
++	mes "Now you're in Faction '"+factioninfo(@faction_id,0)+"'";
++	next;
++	close;
++
++S_FACTION_INFO:
++	mes "Faction id:" +@faction_id;
++	mes "Name:" +factioninfo(@faction_id,0);
++	mes "Unit name:" +factioninfo(@faction_id,1);
++	mes "Home map:" +factioninfo(@faction_id,2);
++	mes "Home map X:" +factioninfo(@faction_id,3);
++	mes "Home map Y:" +factioninfo(@faction_id,4);
++	mes "Race:" +factioninfo(@faction_id,5);
++	mes "Element:" +factioninfo(@faction_id,6);
++	mes "Element lvl:" +factioninfo(@faction_id,7);
++	mes "Size:" +factioninfo(@faction_id,8);
++	mes "Clothes color:" +factioninfo(@faction_id,9);
++	mes "Voting state:" +factioninfo(@faction_id,10);
++
++	mes "Alliance #1:" +factioninfo(@faction_id,11,0);
++	mes "Alliance #2:" +factioninfo(@faction_id,11,1);
++	mes "Alliance #3:" +factioninfo(@faction_id,11,2);
++
++	mes "Aura effect #1:" +factioninfo(@faction_id,12,0);
++	mes "Aura effect #2:" +factioninfo(@faction_id,12,1);
++	mes "Aura effect #3:" +factioninfo(@faction_id,12,2);
++	next;
++	goto L_Menu;
++}
++
++/**
++ * Example shop
++ * Faction ID = 0, Discount -50% for Faction ID 1, Overcharge 50% for Faction ID 4
++ **/
++prontera,152,180,3,0,[1:-50,4:50]	shop	Example_Shop_0	100,7227:100;
++/**
++ * 'floating' shop
++ **/
++-,[1:15,4:-5,2:30]	shop	Example_Floating	100,7227:100;
++
++/**
++ * Example script
++ * Faction ID = 2
++ **/
++prontera,154,180,3,2	script	Example_Script_2	100,{
++	mes "Hello!";
++	close;
++}
++
++/**
++ * Example duplicate
++ * Duplicate of 'Example_Script_2' but with Faction ID = 3
++ **/
++prontera,156,180,5,3	duplicate(Example_Script_2)	Example_Script_3	100
+\ No newline at end of file
+
+Property changes on: npc/faction/sample.txt
+___________________________________________________________________
+Added: svn:eol-style
+## -0,0 +1 ##
++native
+\ No newline at end of property
+Index: npc/scripts_mapflags.conf
+===================================================================
+--- npc/scripts_mapflags.conf	(revision 747)
++++ npc/scripts_mapflags.conf	(working copy)
+@@ -1,6 +1,7 @@
+ // --------------------------------------------------------------
+ // -                         Map  Flags                         -
+ // --------------------------------------------------------------
++npc: conf/mapflag/nofvf.txt
+ npc: conf/mapflag/nopvp.txt
+ npc: conf/mapflag/gvg.txt
+ npc: conf/mapflag/jail.txt
+Index: src/char_sql/char.c
+===================================================================
+--- src/char_sql/char.c	(revision 747)
++++ src/char_sql/char.c	(working copy)
+@@ -476,7 +476,7 @@
+ 		(p->pet_id != cp->pet_id) || (p->weapon != cp->weapon) || (p->hom_id != cp->hom_id) ||
+ 		(p->ele_id != cp->ele_id) || (p->shield != cp->shield) || (p->head_top != cp->head_top) ||
+ 		(p->head_mid != cp->head_mid) || (p->head_bottom != cp->head_bottom) || (p->robe != cp->robe) || 
+-		(p->delete_date != cp->delete_date) || (p->rename != cp->rename)
++		(p->delete_date != cp->delete_date) || (p->rename != cp->rename) || (p->faction_id != cp->faction_id)
+ 	)
+ 	{	//Save status
+ 		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `base_level`='%d', `job_level`='%d',"
+@@ -486,7 +486,7 @@
+ 			"`option`='%d',`party_id`='%d',`guild_id`='%d',`pet_id`='%d',`homun_id`='%d',`elemental_id`='%d',"
+ 			"`weapon`='%d',`shield`='%d',`head_top`='%d',`head_mid`='%d',`head_bottom`='%d',`robe`='%d',"
+ 			"`last_map`='%s',`last_x`='%d',`last_y`='%d',`save_map`='%s',`save_x`='%d',`save_y`='%d', `rename`='%d',"
+-			"`delete_date`='%lu'"
++			"`delete_date`='%lu',`faction_id`='%d'"
+ 			" WHERE  `account_id`='%d' AND `char_id` = '%d'",
+ 			char_db, p->base_level, p->job_level,
+ 			p->base_exp, p->job_exp, p->zeny,
+@@ -497,6 +497,7 @@
+ 			mapindex_id2name(p->last_point.map), p->last_point.x, p->last_point.y,
+ 			mapindex_id2name(p->save_point.map), p->save_point.x, p->save_point.y, p->rename,
+ 			(unsigned long)p->delete_date,  // FIXME: platform-dependent size
++			p->faction_id,
+ 			p->account_id, p->char_id) )
+ 		{
+ 			Sql_ShowDebug(sql_handle);
+@@ -943,7 +944,7 @@
+ 		"`str`,`agi`,`vit`,`int`,`dex`,`luk`,`max_hp`,`hp`,`max_sp`,`sp`,"
+ 		"`status_point`,`skill_point`,`option`,`karma`,`manner`,`party_id`,`guild_id`,`pet_id`,`homun_id`,`elemental_id`,`hair`,"
+ 		"`hair_color`,`clothes_color`,`weapon`,`shield`,`head_top`,`head_mid`,`head_bottom`,`last_map`,`last_x`,`last_y`,"
+-		"`save_map`,`save_x`,`save_y`,`partner_id`,`father`,`mother`,`child`,`fame`,`rename`,`delete_date`,`robe`"
++		"`save_map`,`save_x`,`save_y`,`partner_id`,`father`,`mother`,`child`,`fame`,`rename`,`delete_date`,`robe`,`faction_id`"
+ 		" FROM `%s` WHERE `char_id`=? LIMIT 1", char_db)
+ 	||	SQL_ERROR == SqlStmt_BindParam(stmt, 0, SQLDT_INT, &char_id, 0)
+ 	||	SQL_ERROR == SqlStmt_Execute(stmt)
+@@ -999,6 +1000,7 @@
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 49, SQLDT_SHORT,	&p->rename, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 50, SQLDT_UINT32, &p->delete_date, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 51, SQLDT_SHORT,  &p->robe, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 53, SQLDT_INT,	&p->faction_id, 0, NULL, NULL)  // Complete Faction System [Lilith]
+ 	)
+ 	{
+ 		SqlStmt_ShowDebug(stmt);
+Index: src/common/mmo.h
+===================================================================
+--- src/common/mmo.h	(revision 747)
++++ src/common/mmo.h	(working copy)
+@@ -407,6 +407,7 @@
+ 	bool show_equip;
+ 	short rename;
+ 
++	int faction_id; // Complete Faction System [Lilith]
+ 	time_t delete_date;
+ };
+ 
+Index: src/map/atcommand.c
+===================================================================
+--- src/map/atcommand.c	(revision 747)
++++ src/map/atcommand.c	(working copy)
+@@ -35,6 +35,7 @@
+ #include "script.h"
+ #include "trade.h"
+ #include "unit.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #ifndef TXT_ONLY
+ #include "mail.h"
+@@ -1235,6 +1236,10 @@
+ 		sd->sc.option |= OPTION_INVISIBLE;
+ 		sd->vd.class_ = INVISIBLE_CLASS;
+ 		clif_displaymessage(fd, msg_txt(11)); // Invisible: On
++
++		clif_clearunit_area(&sd->bl,0);
++		map_foreachinrange(faction_aura_clear, &sd->bl, AREA_SIZE, BL_PC, &sd->bl);
++		clif_refresh(sd);
+ 	}
+ 	clif_changeoption(&sd->bl);
+ 
+@@ -4451,11 +4456,12 @@
+ 	char direction[12];
+ 	int i, m_id, chat_num, list = 0;
+ 	unsigned short m_index;
+-	char mapname[24];
++	char mapname[24], atcmd_output2[CHAT_SIZE_MAX];
+ 
+ 	nullpo_retr(-1, sd);
+ 
+ 	memset(atcmd_output, '\0', sizeof(atcmd_output));
++	memset(atcmd_output2, '\0', sizeof(atcmd_output2));
+ 	memset(mapname, '\0', sizeof(mapname));
+ 	memset(direction, '\0', sizeof(direction));
+ 
+@@ -4579,6 +4585,21 @@
+ 		strcat(atcmd_output, "Displays Night | ");
+ 	clif_displaymessage(fd, atcmd_output);
+ 
++	strcpy(atcmd_output,msg_txt(818)); // FvF Flags:
++	if (map[m_id].flag.fvf)
++		strcat(atcmd_output, msg_txt(810)); // FvF ON |
++	if (map[m_id].faction.id)
++	{
++		sprintf(atcmd_output2, msg_txt(819), map[m_id].faction.id); // Faction ID: %d |
++		strcat(atcmd_output, atcmd_output2);
++		if (map[m_id].faction.relic)
++		{
++			sprintf(atcmd_output2, msg_txt(841), map[m_id].faction.relic); // Relic ID: %d |
++			strcat(atcmd_output, atcmd_output2);
++		}
++	}
++	clif_displaymessage(fd, atcmd_output);
++
+ 	strcpy(atcmd_output,"Other Flags: ");
+ 	if (map[m_id].flag.nobranch)
+ 		strcat(atcmd_output, "NoBranch | ");
+@@ -8054,7 +8075,7 @@
+ 		if( sd->fakename[0] )
+ 		{
+ 			sd->fakename[0] = '\0';
+-			clif_charnameack(0, &sd->bl);
++			clif_charnameack(NULL, &sd->bl);
+ 			clif_displaymessage(sd->fd, "Returned to real name.");
+ 			return 0;
+ 		}
+@@ -8070,7 +8091,7 @@
+ 	}
+ 	
+ 	safestrncpy(sd->fakename, message, sizeof(sd->fakename));
+-	clif_charnameack(0, &sd->bl);
++	clif_charnameack(NULL, &sd->bl);
+ 	clif_displaymessage(sd->fd, "Fake name enabled.");
+ 
+ 	return 0;
+@@ -8932,8 +8953,377 @@
+ 	return 0;
+ }
+ 
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @setfaction #
++ *------------------------------------------*/
++ACMD_FUNC(setfaction)
++{
++	struct faction_data* fdb;
++	int id = 0;
+ 
++	id = atoi(message);
++	if( !message || !*message ) {
++		clif_displaymessage(fd, msg_txt(828)); // Usage: @setfaction <Faction ID>.
++		return -1;
++	}
++
++	if( id && (fdb = faction_search(id)) == NULL ) {
++		clif_displaymessage(fd, msg_txt(816)); // Unknown faction ID
++		return -1;
++	}
++
++	if( id && fdb ) {
++		sprintf(atcmd_output, msg_txt(817), fdb->name); // Now you're in faction: %s
++		clif_displaymessage(sd->fd, atcmd_output);
++	} else
++		clif_displaymessage(fd, msg_txt(840)); // You're not in a faction now.
++
++	sd->status.faction_id = id;
++	status_calc_pc(sd,0);
++
++	if( map[sd->bl.m].flag.fvf && !pc_isdead(sd) )
++		pc_setpos(sd, sd->mapindex, sd->bl.x, sd->bl.y, CLR_RESPAWN);
++
++	return 0;
++}
++
+ /*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @reloadfactiondb
++ * Reloading faction_db.txt
++ *------------------------------------------*/
++ACMD_FUNC(reloadfactiondb)
++{
++	nullpo_retr(-1, sd);
++
++	do_reload_faction();
++	clif_displaymessage(fd, msg_txt(803)); // Faction system has been reloaded
++
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @fvfon
++ *------------------------------------------*/
++ACMD_FUNC(fvfon)
++{
++	int faction_id = 0, relic_id = 0;
++
++	nullpo_retr(-1, sd);
++
++	if( map[sd->bl.m].flag.fvf ) {
++		clif_displaymessage(fd, msg_txt(813)); // FvF is already on
++		return -1;
++	}
++
++	if( message )
++		sscanf(message, "%d %d", &faction_id, &relic_id);
++
++	map[sd->bl.m].faction.id = faction_id;
++	map[sd->bl.m].faction.relic = relic_id;
++
++	map[sd->bl.m].flag.fvf = 1;
++	clif_map_property_mapall(sd->bl.m, MAPPROPERTY_AGITZONE);
++	map_foreachinmap(faction_reload_fvf_sub, sd->bl.m, BL_ALL);
++	clif_displaymessage(fd, msg_txt(812)); // FvF: On
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @fvfoff
++ *------------------------------------------*/
++ACMD_FUNC(fvfoff)
++{
++	nullpo_retr(-1, sd);
++
++	if( !map[sd->bl.m].flag.fvf ) {
++		clif_displaymessage(fd, msg_txt(815)); // FvF is already off
++		return -1;
++	}
++
++	map[sd->bl.m].flag.fvf = 0;
++	map[sd->bl.m].faction.id = 0;
++	map[sd->bl.m].faction.relic = 0;
++	clif_map_property_mapall(sd->bl.m, MAPPROPERTY_NOTHING);
++	map_foreachinmap(faction_reload_fvf_sub, sd->bl.m, BL_ALL);
++	clif_displaymessage(fd, msg_txt(814)); // FvF: Off
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @home
++ * Teleporting to Faction Location
++ *------------------------------------------*/
++ACMD_FUNC(home)
++{
++	struct faction_data *fdb = NULL;
++	unsigned short mapindex;
++
++	nullpo_retr(-1, sd);
++
++	if(!sd->status.faction_id) {
++		clif_displaymessage(fd, msg_txt(807)); // You're not in faction.
++		return -1;
++	}
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL ) {
++		clif_displaymessage(fd, msg_txt(816)); // Unknown faction ID
++		return -1;
++	}
++
++	if(fdb->map[0] == '\0') {
++		clif_displaymessage(fd, msg_txt(829)); // Your Faction haven't home location.
++		return -1;
++	}
++
++	if(!(mapindex = mapindex_name2id(fdb->map))) {
++		clif_displaymessage(fd, msg_txt(829)); // Your Faction haven't home location.
++		return -1;
++	}
++
++	if (pc_setpos(sd, mapindex, fdb->x, fdb->y, CLR_TELEPORT) != 0) {
++		clif_displaymessage(fd, msg_txt(1)); // Map not found.
++		return -1;
++	}
++
++	clif_displaymessage(fd, msg_txt(0)); // Warped.
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @factionleader
++ * Set Character the faction leader
++ *------------------------------------------*/
++ACMD_FUNC(factionleader)
++{
++	struct faction_data *fdb = NULL;
++
++	nullpo_retr(-1, sd);
++
++	memset(atcmd_output, '\0', sizeof(atcmd_output));
++
++	if(!sd->status.faction_id) {
++		clif_displaymessage(fd, msg_txt(807)); // You're not in faction.
++		return -1;
++	}
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL ) {
++		clif_displaymessage(fd, msg_txt(816)); // Unknown faction ID
++	return -1;
++	}
++
++	faction_change_leader(sd->status.faction_id, sd->status.char_id);
++
++	sprintf(atcmd_output, msg_txt(821), sd->status.faction_id, fdb->name, sd->status.name); // Leader of Faction %d:%s is now '%s'
++	clif_displaymessage(fd, atcmd_output);
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @vote (<Player's Name>)
++ * Voting for Faction Leader
++ *------------------------------------------*/
++ACMD_FUNC(vote)
++{
++	struct faction_data *fdb;
++	struct voting_data *vdb;
++	char charname[NAME_LENGTH];
++	TBL_PC * ssd = NULL;
++
++	nullpo_retr(-1, sd);
++
++	memset(atcmd_output, '\0', sizeof(atcmd_output));
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL ) {
++		clif_displaymessage(fd, msg_txt(816)); // Unknown faction ID
++		return -1;
++	}
++
++	if( !fdb->voting_active ) {
++		clif_displaymessage(fd, msg_txt(823)); // Voting for your faction leader not started.
++		return -1;
++	}
++
++	if( (vdb = voting_search(sd->status.char_id)) != NULL && vdb->voted ) {
++		clif_displaymessage(fd, msg_txt(824)); // You already voted.
++		return -1;
++	}
++
++	if( !message || !*message || (
++			sscanf(message, "\"%23[^\"]\"", charname) < 1 &&
++			sscanf(message, "%23s", charname) < 1)
++	) {
++		clif_displaymessage(fd, msg_txt(825)); // Usage: @vote <Character Name>.
++		return -1;
++	}
++
++	if( (ssd = map_nick2sd(charname)) == NULL ) {
++		sprintf(atcmd_output, msg_txt(855), command); // %s failed. Player not found.
++		clif_displaymessage(fd, atcmd_output);
++		return -1;
++	}
++
++	if( sd->status.faction_id != ssd->status.faction_id ) {
++		clif_displaymessage(fd, msg_txt(826)); // Player is not in your faction.
++		return -1;
++	}
++
++	if( sd == ssd ) {
++		clif_displaymessage(fd, msg_txt(827)); // You cannot vote for yourself.
++		return -1;
++	}
++
++
++	faction_voting_add(sd, ssd, 1);
++	sprintf(atcmd_output, msg_txt(830), ssd->status.name); // You voted for '%s' as a faction leader.
++	clif_displaymessage(fd, atcmd_output);
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @factionmonster <Faction ID> <...>
++ *------------------------------------------*/
++ACMD_FUNC(factionmonster)
++{
++	char name[NAME_LENGTH], monster[NAME_LENGTH], eventname[51] = "";
++	int number = 0, count, faction_id, mob_id, i, range;
++	short mx, my;
++	struct faction_data *fdb;
++	struct mob_data *md;
++	nullpo_retr(-1, sd);
++
++	memset(name, '\0', sizeof(name));
++	memset(monster, '\0', sizeof(monster));
++	memset(atcmd_output, '\0', sizeof(atcmd_output));
++
++	if (!message || !*message) {
++			clif_displaymessage(fd, msg_txt(822)); // Give the faction ID, display name or monster name/id please.
++			return -1;
++	}
++	if (sscanf(message, "%d \"%23[^\"]\" %23s %d", &faction_id, name, monster, &number) > 2 ||
++		sscanf(message, "%d %23s \"%23[^\"]\" %d", &faction_id, monster, name, &number) > 2) {
++		//All data can be left as it is.
++	} else if ((count=sscanf(message, "%d %23s %d %23s", &faction_id, monster, &number, name)) > 2) {
++		//Here, it is possible name was not given and we are using monster for it.
++		if (count < 3) //Blank mob's name.
++			name[0] = '\0';
++	} else if (sscanf(message, "%d %23s %23s %d", &faction_id, name, monster, &number) > 2) {
++		//All data can be left as it is.
++	} else if (sscanf(message, "%d %23s", &faction_id, monster) > 1) {
++		//As before, name may be already filled.
++		name[0] = '\0';
++	} else {
++		clif_displaymessage(fd, msg_txt(822)); // Give the faction ID, display name or monster name/id please.
++		return -1;
++	}
++
++	if ((mob_id = mobdb_searchname(monster)) == 0) // check name first (to avoid possible name begining by a number)
++		mob_id = mobdb_checkid(atoi(monster));
++
++	if (mob_id == 0) {
++		clif_displaymessage(fd, msg_txt(40)); // Invalid monster ID or name.
++		return -1;
++	}
++
++	if (mob_id == MOBID_EMPERIUM) {
++		clif_displaymessage(fd, msg_txt(83)); // Monster 'Emperium' cannot be spawned.
++		return -1;
++	}
++
++	if( (fdb = faction_search(faction_id)) == NULL ) {
++		clif_displaymessage(fd, msg_txt(816)); // Unknown faction ID
++		return -1;
++	}
++
++	if (number <= 0)
++		number = 1;
++
++	if( !name[0] )
++		strcpy(name, "--ja--");
++
++	// If value of atcommand_spawn_quantity_limit directive is greater than or equal to 1 and quantity of monsters is greater than value of the directive
++	if (battle_config.atc_spawn_quantity_limit && number > battle_config.atc_spawn_quantity_limit)
++		number = battle_config.atc_spawn_quantity_limit;
++
++	if (battle_config.etc_log)
++		ShowInfo("%s monster='%s' name='%s' id=%d count=%d (%d,%d)\n", command, monster, name, mob_id, number, sd->bl.x, sd->bl.y);
++
++	count = 0;
++	range = (int)sqrt((float)number) +2; // calculation of an odd number (+ 4 area around)
++	for (i = 0; i < number; i++) {
++		map_search_freecell(&sd->bl, 0, &mx,  &my, range, range, 0);
++		if( (md = mob_once_spawn_sub(&sd->bl, sd->bl.m, mx, my, name, mob_id, eventname)) ) {
++			md->faction_id = faction_id;
++			mob_spawn(md);
++			count++;
++		}
++	}
++
++	if (count != 0)
++		if (number == count)
++			clif_displaymessage(fd, msg_txt(39)); // All monster summoned!
++		else {
++			sprintf(atcmd_output, msg_txt(240), count); // %d monster(s) summoned!
++			clif_displaymessage(fd, atcmd_output);
++		}
++	else {
++		clif_displaymessage(fd, msg_txt(40)); // Invalid monster ID or name.
++		return -1;
++	}
++
++	return 0;
++}
++
++/*==========================================
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * @factionannounce <message>
++ * Send an announce to your faction being the faction leader
++ *------------------------------------------*/
++ACMD_FUNC(factionannounce)
++{
++	struct faction_data *fdb = NULL;
++
++	nullpo_retr(-1, sd);
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL ) {
++		clif_displaymessage(sd->fd, msg_txt(807)); // You're not in faction.
++		return -1;
++	}
++
++	if( sd->status.char_id != fdb->leader_id ) {
++		clif_displaymessage(fd, msg_txt(839)); // You're not a Faction Leader.
++		return -1;
++	}
++
++	if( !message || !*message ) {
++		clif_displaymessage(fd, msg_txt(838)); // Usage: @factionannounce <message>.
++		return -1;
++	}
++
++	sprintf(atcmd_output, msg_txt(820), sd->status.name, message); // [Faction Leader] %s : %s
++	clif_broadcast2(&sd->bl, atcmd_output, strlen(atcmd_output) + 1, battle_config.chat_leader, 0x190, 12, 0, 0, FACTION);
++
++	return 0;
++}
++
++
++/*==========================================
+  * atcommand_info[] structure definition
+  *------------------------------------------*/
+ 
+@@ -9239,6 +9629,18 @@
+ 	{ "hommutate",         60,60,     atcommand_hommutation },
+ 	{ "hommutation",       60,60,     atcommand_hommutation },
+ 	{ "produceeffect",     99,99,     atcommand_produceeffect },
++	
++	// Complete Faction System [Lilith]
++	{ "setfaction",			60,60,		atcommand_setfaction },
++	{ "reloadfactiondb",	99,99,		atcommand_reloadfactiondb },
++	{ "fvfon",				60,60,		atcommand_fvfon },
++	{ "fvfoff",				60,60,		atcommand_fvfoff },
++	{ "home",				 1,1,		atcommand_home },
++	{ "vote",				 1,1,		atcommand_vote },
++	{ "factionmonster",		60,60,		atcommand_factionmonster },
++	{ "factionleader",		60,60,		atcommand_factionleader },
++	{ "factionannounce",	 1,1,		atcommand_factionannounce },
++	// Complete Faction System [Lilith]
+ };
+ 
+ 
+
+Property changes on: src/map/atcommand.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/battle.c
+===================================================================
+--- src/map/battle.c	(revision 747)
++++ src/map/battle.c	(working copy)
+@@ -26,6 +26,7 @@
+ #include "party.h"
+ #include "battle.h"
+ #include "battleground.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -825,6 +826,44 @@
+ }
+ 
+ /*==========================================
++ * Calculates FVF related damage adjustments.
++ *------------------------------------------*/
++int battle_calc_fvf_damage(struct block_list *src, struct block_list *bl, int damage, int div_, uint16 skill_id, uint16 skill_lv, int flag)
++{
++	if( !damage )
++		return 0;
++
++	switch( skill_id )
++	{
++		case PA_PRESSURE:
++		case HW_GRAVITATION:
++		case NJ_ZENYNAGE:
++		case KO_MUCHANAGE:
++			break;
++		default:
++			if( flag&BF_SKILL )
++			{
++				if( flag&BF_WEAPON )
++					damage = damage * battle_config.fvf_weapon_damage_rate/100;
++				if( flag&BF_MAGIC )
++					damage = damage * battle_config.fvf_magic_damage_rate/100;
++				if(	flag&BF_MISC )
++					damage = damage * battle_config.fvf_misc_damage_rate/100;
++			}
++			else
++			{
++				if( flag&BF_SHORT )
++					damage = damage * battle_config.fvf_short_damage_rate/100;
++				if( flag&BF_LONG )
++					damage = damage * battle_config.fvf_long_damage_rate/100;
++			}
++			if( !damage ) damage = 1;
++	}
++
++	return damage;
++}
++
++/*==========================================
+  * Calculates BG related damage adjustments.
+  *------------------------------------------*/
+ int battle_calc_bg_damage(struct block_list *src, struct block_list *bl, int damage, int div_, int skill_num, int skill_lv, int flag)
+@@ -3401,6 +3440,8 @@
+ 				wd.damage = battle_calc_gvg_damage(src,target,wd.damage,wd.div_,skill_num,skill_lv,wd.flag);
+ 			else if( map[target->m].flag.battleground )
+ 				wd.damage = battle_calc_bg_damage(src,target,wd.damage,wd.div_,skill_num,skill_lv,wd.flag);
++			else if( map[target->m].flag.fvf )
++				wd.damage=battle_calc_fvf_damage(src,target,wd.damage,wd.div_,skill_num,skill_lv,wd.flag);
+ 		}
+ 		if( wd.damage2 )
+ 		{
+@@ -3409,6 +3450,8 @@
+ 				wd.damage2 = battle_calc_gvg_damage(src,target,wd.damage2,wd.div_,skill_num,skill_lv,wd.flag);
+ 			else if( map[target->m].flag.battleground )
+ 				wd.damage = battle_calc_bg_damage(src,target,wd.damage2,wd.div_,skill_num,skill_lv,wd.flag);
++			else if( map[target->m].flag.fvf )
++				wd.damage=battle_calc_fvf_damage(src,target,wd.damage,wd.div_,skill_num,skill_lv,wd.flag);
+ 		}
+ 	}
+ 
+@@ -4206,6 +4249,8 @@
+ 		ad.damage = battle_calc_gvg_damage(src,target,ad.damage,ad.div_,skill_num,skill_lv,ad.flag);
+ 	else if( map[target->m].flag.battleground )
+ 		ad.damage = battle_calc_bg_damage(src,target,ad.damage,ad.div_,skill_num,skill_lv,ad.flag);
++	else if( map[target->m].flag.fvf )
++		ad.damage=battle_calc_fvf_damage(src,target,ad.damage,ad.div_,skill_num,skill_lv,ad.flag);
+ 
+ 	if( skill_num == WL_HELLINFERNO && s_ele == ELE_FIRE )
+ 	{ // Calculates Shadow Element Extra
+@@ -4508,6 +4553,8 @@
+ 		md.damage = battle_calc_gvg_damage(src,target,md.damage,md.div_,skill_num,skill_lv,md.flag);
+ 	else if( map[target->m].flag.battleground )
+ 		md.damage = battle_calc_bg_damage(src,target,md.damage,md.div_,skill_num,skill_lv,md.flag);
++	else if( map[target->m].flag.fvf )
++		md.damage=battle_calc_fvf_damage(src,target,md.damage,md.div_,skill_num,skill_lv,md.flag);
+ 
+ 	switch( skill_num )
+ 	{
+@@ -5176,6 +5223,9 @@
+ 	if( (s_bl = battle_get_master(src)) == NULL )
+ 		s_bl = src;
+ 
++	if( flag == BCT_FACTION && faction_get_id(s_bl) == faction_get_id(t_bl) ) // Complete Faction System [Lilith]
++		return 1;
++
+ 	switch( target->type )
+ 	{ // Checks on actual target
+ 		case BL_PC:
+@@ -5333,6 +5383,14 @@
+ 				if( t_bl->type == BL_MOB && !((TBL_MOB*)t_bl)->special_state.ai )
+ 					state |= BCT_ENEMY; //Natural enemy for AI mobs are normal mobs.
+ 			}
++
++			if( t_bl != s_bl && map[m].flag.fvf && !faction_check_alliance(s_bl,t_bl) && md->faction_id && (
++				(battle_config.fvf_monster_ai && !((TBL_MOB*)t_bl)->faction_id) ||
++				(!battle_config.fvf_monster_ai && ((TBL_MOB*)t_bl)->faction_id))) {
++				state |= BCT_ENEMY;
++				strip_enemy = 0;
++			}
++
+ 			break;
+ 		}
+ 		default:
+@@ -5385,10 +5443,23 @@
+ 			else
+ 				state |= BCT_ENEMY;
+ 		}
+-		if( state&BCT_ENEMY && map[m].flag.battleground && sbg_id && sbg_id == tbg_id )
++		if( state&BCT_ENEMY )
++		{
++			if( map[m].flag.battleground && sbg_id && sbg_id == tbg_id )
+ 			state &= ~BCT_ENEMY;
+-
+-		if( state&BCT_ENEMY && battle_config.pk_mode && !map_flag_gvg(m) && s_bl->type == BL_PC && t_bl->type == BL_PC )
++			if( map[m].flag.fvf ) // Complete Faction System [Lilith]
++            {
++                if( (faction_get_id(s_bl) && faction_get_id(t_bl) && (
++                    map_getcell(t_bl->m,t_bl->x,t_bl->y,CELL_CHKNOFVF) ||
++                    map_getcell(s_bl->m,s_bl->x,s_bl->y,CELL_CHKNOFVF) ||
++                    (s_bl->type == BL_PC && ((int)((TBL_PC*)s_bl)->status.base_level < battle_config.fvf_min_lvl)) ||
++                    (t_bl->type == BL_PC && ((int)((TBL_PC*)t_bl)->status.base_level < battle_config.fvf_min_lvl)) ||
++                    faction_check_alliance(s_bl,t_bl))) ||
++                    (s_bl->type == BL_PC && t_bl->type == BL_PC && !faction_get_id(s_bl) && !faction_get_id(t_bl))
++                )
++                    state &= ~BCT_ENEMY;
++            }
++			if( battle_config.pk_mode && !map_flag_gvg(m) && s_bl->type == BL_PC && t_bl->type == BL_PC )
+ 		{ // Prevent novice engagement on pk_mode (feature by Valaris)
+ 			TBL_PC *sd = (TBL_PC*)s_bl, *sd2 = (TBL_PC*)t_bl;
+ 			if (
+@@ -5401,6 +5472,7 @@
+ 				state &= ~BCT_ENEMY;
+ 		}
+ 	}
++	}
+ 	else
+ 	{ //Non pvp/gvg, check party/guild settings.
+ 		if( flag&BCT_PARTY || state&BCT_ENEMY )
+@@ -5861,6 +5933,36 @@
+ 	{ "bg_magic_attack_damage_rate",        &battle_config.bg_magic_damage_rate,            60,     0,      INT_MAX,        },
+ 	{ "bg_misc_attack_damage_rate",         &battle_config.bg_misc_damage_rate,             60,     0,      INT_MAX,        },
+ 	{ "bg_flee_penalty",                    &battle_config.bg_flee_penalty,                 20,     0,      INT_MAX,        },
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ **/
++	{ "faction_status_bl",					&battle_config.faction_status_bl,  			BL_CHAR, 	BL_NUL, BL_ALL,         },
++	{ "fvf_monster_ai",						&battle_config.fvf_monster_ai,					1,      0,      1				},
++	{ "faction_chat_settings",				&battle_config.faction_chat_settings,		  1|2,      0,      1|2				},
++	{ "fvf_hp_bar",							&battle_config.fvf_hp_bar,						1,      0,      1				},
++	{ "fvf_min_lvl",						&battle_config.fvf_min_lvl,						55,     1,      MAX_LEVEL		},
++	{ "fvf_visual_size",					&battle_config.fvf_visual_size,					1,      0,      2				},
++	{ "fvf_short_attack_damage_rate",		&battle_config.fvf_short_damage_rate,			80,     0,      INT_MAX         },
++	{ "fvf_long_attack_damage_rate",		&battle_config.fvf_long_damage_rate,			80,     0,      INT_MAX         },
++	{ "fvf_weapon_attack_damage_rate",		&battle_config.fvf_weapon_damage_rate,			60,     0,      INT_MAX         },
++	{ "fvf_magic_attack_damage_rate",		&battle_config.fvf_magic_damage_rate,			60,     0,      INT_MAX         },
++	{ "fvf_misc_attack_damage_rate",		&battle_config.fvf_misc_damage_rate,			60,     0,      INT_MAX         },
++	{ "chat_leader",						&battle_config.chat_leader,				0xFF0000,	0x000000,	0xFFFFFF		},
++	{ "fvf_change_ccolor",					&battle_config.fvf_change_ccolor,				1,		0,      2,				},
++	{ "faction_heal_settings",				&battle_config.faction_heal_settings,			1,		0,      2,				},
++	{ "faction_party_settings",				&battle_config.faction_party_settings,			0,		0,      2,				},
++	{ "faction_guild_settings",				&battle_config.faction_guild_settings,			0,		0,      2,				},
++	{ "faction_heal_bl",                    &battle_config.faction_heal_bl,           	BL_PC, 		BL_NUL, BL_ALL,         },
++	{ "faction_size_bl",                    &battle_config.faction_size_bl,           	BL_CHAR, 	BL_NUL, BL_ALL,         },
++	{ "faction_aura_bl",                    &battle_config.faction_aura_bl,    		BL_CHAR|BL_NPC, BL_NUL, BL_ALL,         },
++	{ "faction_aura_settings",				&battle_config.faction_aura_settings,			0,		0,      2,				},
++	{ "faction_trade_settings",				&battle_config.faction_trade_settings,			0,		0,      2,				},
++	{ "faction_ally_info_bl",				&battle_config.faction_ally_info_bl,  		BL_CHAR, 	BL_NUL, BL_ALL,         },
++	{ "faction_npc_settings",				&battle_config.faction_npc_settings,			0,		0,      2,				},
++	{ "fvf_in_all_maps",					&battle_config.fvf_in_all_maps,					0,		0,      1,				},
++	{ "faction_disc_min",					&battle_config.faction_disc_min,			 -100,	 -INT_MAX,  0		        },
++	{ "faction_disc_max",					&battle_config.faction_disc_max,			  100,		0,   	INT_MAX         },	
+ // 3CeAM Settings
+ 	{ "renewal_casting_renewal_skills",     &battle_config.renewal_casting_renewal_skills,  1,      0,      1,              },
+ 	{ "castrate_dex_scale_renewal_jobs",    &battle_config.castrate_dex_scale_renewal_jobs, 150,    1,      INT_MAX,        },
+
+Property changes on: src/map/battle.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/battle.h
+===================================================================
+--- src/map/battle.h	(revision 747)
++++ src/map/battle.h	(working copy)
+@@ -84,10 +84,11 @@
+ #define BCT_GUILD	0x080000
+ //This should be (~BCT_GUILD&BCT_ALL)
+ #define BCT_NOGUILD 0x170000
+-#define BCT_ALL 0x1f0000
++#define BCT_ALL 0x1f0001
+ #define BCT_NOONE 0x000000
+ #define BCT_SELF 0x010000
+ #define BCT_NEUTRAL 0x100000
++#define BCT_FACTION 0x000001 // Complete Faction System [Lilith]
+ 
+ #define	is_boss(bl)	(status_get_mode(bl)&MD_BOSS)	// Can refine later [Aru]
+ 
+@@ -501,6 +502,34 @@
+ 	int bg_misc_damage_rate;
+ 	int bg_flee_penalty;
+ 
++	// Complete Faction System [Lilith]
++	int faction_status_bl;
++	int fvf_monster_ai;
++	int faction_chat_settings;
++	int fvf_hp_bar;
++	int fvf_min_lvl;
++	int fvf_visual_size;
++	int fvf_short_damage_rate;
++	int fvf_long_damage_rate;
++	int fvf_weapon_damage_rate;
++	int fvf_magic_damage_rate;
++	int fvf_misc_damage_rate;
++	int chat_leader;
++	int fvf_change_ccolor;
++	int faction_heal_settings;
++	int faction_heal_bl;
++	int faction_party_settings;
++	int faction_guild_settings;
++	int faction_size_bl;
++	int faction_aura_bl;
++	int faction_aura_settings;
++	int faction_trade_settings;
++	int faction_ally_info_bl;
++	int faction_npc_settings;
++	int fvf_in_all_maps;
++	int faction_disc_min;
++	int faction_disc_max;
++
+ 	// 3CeAM Added
+ 	int renewal_casting_renewal_skills;
+ 	int castrate_dex_scale_renewal_jobs;
+
+Property changes on: src/map/battle.h
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/clif.c
+===================================================================
+--- src/map/clif.c	(revision 747)
++++ src/map/clif.c	(working copy)
+@@ -40,6 +40,7 @@
+ #include "clif.h"
+ #include "mail.h"
+ #include "quest.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -231,6 +232,18 @@
+ 
+ 	switch(type)
+ 	{
++	case AREA_FVF: // Complete Faction System [Lilith]
++	case FACTION_AREA_WOS:
++	case FVF_OTHER_AREA_CHAT:
++		if( type != AREA_FVF && bl == src_bl )
++			return 0;
++
++		if( type == FACTION_AREA_WOS && !faction_check_alliance(src_bl,bl) )
++			return 0;
++
++		if( type == FVF_OTHER_AREA_CHAT && faction_check_alliance(src_bl,bl) )
++			return 0;
++	break;
+ 	case AREA_WOS:
+ 		if (bl == src_bl)
+ 			return 0;
+@@ -544,6 +557,26 @@
+ 		}
+ 		break;
+ 
++	// Complete Faction System [Lilith]
++	case FACTION:
++		iter = mapit_getallusers();
++		while( (tsd = (TBL_PC*)mapit_next(iter)) != NULL ) {
++			if( sd->status.faction_id != tsd->status.faction_id )
++				continue;
++			if( packet_db[tsd->packet_ver][RBUFW(buf,0)].len ) {
++				WFIFOHEAD(tsd->fd, len);
++				memcpy(WFIFOP(tsd->fd,0), buf, len);
++				WFIFOSET(tsd->fd,len);
++			}
++		}
++		mapit_free(iter);
++		break;
++
++	case AREA_FVF:
++	case FACTION_AREA_WOS:
++	case FVF_OTHER_AREA_CHAT:
++			map_foreachinarea(clif_send_sub, bl->m, bl->x-AREA_SIZE, bl->y-AREA_SIZE, bl->x+AREA_SIZE, bl->y+AREA_SIZE,BL_PC, buf, len, bl, type);
++		break;
+ 	default:
+ 		ShowError("clif_send: Unrecognized type %d\n",type);
+ 		return -1;
+@@ -1202,6 +1235,7 @@
+ {
+ 	unsigned char buf[128];
+ 	struct view_data *vd;
++	struct faction_data *fdb;
+ 	int len;
+ 
+ 	vd = status_get_viewdata(bl);
+@@ -1213,8 +1247,10 @@
+ 	if (disguised(bl))
+ 		clif_setdisguise(bl, buf, len);
+ 
+-	if (vd->cloth_color)
+-		clif_refreshlook(bl,bl->id,LOOK_CLOTHES_COLOR,vd->cloth_color,AREA_WOS);
++	if( battle_config.fvf_change_ccolor && (fdb = faction_search(faction_get_id(bl))) != NULL )
++		clif_refreshlook(bl,bl->id,LOOK_CLOTHES_COLOR,(map[bl->m].flag.fvf || battle_config.fvf_change_ccolor == 2) ? fdb->ccolor : vd->cloth_color,AREA_WOS);
++	else if( vd->cloth_color )
++		clif_refreshlook(bl,bl->id,LOOK_CLOTHES_COLOR, vd->cloth_color,AREA_WOS);
+ 		
+ 	switch (bl->type)
+ 	{
+@@ -1319,6 +1355,7 @@
+ 			clif_pet_equip_area((TBL_PET*)bl); // needed to display pet equip properly
+ 		break;
+ 	}
++	faction_spawn(bl);
+ 	return 0;
+ }
+ 
+@@ -1471,6 +1508,7 @@
+ static void clif_move2(struct block_list *bl, struct view_data *vd, struct unit_data *ud)
+ {
+ 	uint8 buf[128];
++	struct faction_data *fdb = NULL;
+ 	int len;
+ 	
+ 	len = clif_set_unit_walking(bl,ud,buf);
+@@ -1478,7 +1516,9 @@
+ 	if (disguised(bl))
+ 		clif_setdisguise(bl, buf, len);
+ 		
+-	if(vd->cloth_color)
++	if( battle_config.fvf_change_ccolor && (fdb = faction_search(faction_get_id(bl))) != NULL )
++		clif_refreshlook(bl,bl->id,LOOK_CLOTHES_COLOR,(map[bl->m].flag.fvf || battle_config.fvf_change_ccolor == 2) ? fdb->ccolor : vd->cloth_color,AREA_WOS);
++	else if(vd->cloth_color)
+ 		clif_refreshlook(bl,bl->id,LOOK_CLOTHES_COLOR,vd->cloth_color,AREA_WOS);
+ 
+ 	switch(bl->type)
+@@ -1672,7 +1712,7 @@
+ 		if( id == NULL )
+ 			continue;
+ 		WFIFOL(fd, 4+c*11) = val;
+-		WFIFOL(fd, 8+c*11) = pc_modifybuyvalue(sd,val);
++		WFIFOL(fd, 8+c*11) = pc_modifybuyvalue(sd,nd,val);
+ 		WFIFOB(fd,12+c*11) = itemtype(id->type);
+ 		WFIFOW(fd,13+c*11) = ( id->view_id > 0 ) ? id->view_id : id->nameid;
+ 		c++;
+@@ -2598,6 +2638,8 @@
+ 			clif_party_hp(sd);
+ 		if( sd->state.bg_id )
+ 			clif_bg_hp(sd);
++		if( map[sd->bl.m].flag.fvf && battle_config.fvf_hp_bar ) // Complete Faction System [Lilith]
++			faction_hp(sd);
+ 		break;
+ 	case SP_SP:
+ 		WFIFOL(fd,4)=sd->battle_status.sp;
+@@ -2842,6 +2884,11 @@
+ 				(vd->class_ == JOB_SUMMER2 && battle_config.summer2_ignorepalette)
+ 			))
+ 				val = 0;
++			{
++				struct faction_data *fdb;
++				if( (fdb = faction_search(faction_get_id(bl))) != NULL && battle_config.fvf_change_ccolor == 2 )
++					val = fdb->ccolor;
++			}
+ 			vd->cloth_color = val;
+ 		break;
+ 		case LOOK_SHOES:
+@@ -4026,7 +4073,8 @@
+ 
+ 	if( (sd->status.party_id && dstsd->status.party_id == sd->status.party_id) || //Party-mate, or hpdisp setting.
+ 		(sd->state.bg_id && sd->state.bg_id == dstsd->state.bg_id) || //BattleGround
+-		(battle_config.disp_hpmeter && (gmlvl = pc_isGM(sd)) >= battle_config.disp_hpmeter && gmlvl >= pc_isGM(dstsd)) )
++		(battle_config.disp_hpmeter && (gmlvl = pc_isGM(sd)) >= battle_config.disp_hpmeter && gmlvl >= pc_isGM(dstsd))  || 
++		(faction_check_hp(sd,dstsd)) ) // Complete Faction System [Lilith]
+ 		clif_hpmeter_single(sd->fd, dstsd->bl.id, dstsd->battle_status.hp, dstsd->battle_status.max_hp);
+ 
+ 	// display link (sd - dstsd) to sd
+@@ -4045,6 +4093,7 @@
+ 	uint8 buf[128];
+ 	struct unit_data *ud;
+ 	struct view_data *vd;
++	struct faction_data *fdb;
+ 	int len;
+ 	
+ 	vd = status_get_viewdata(bl);
+@@ -4055,7 +4104,9 @@
+ 	len = ( ud && ud->walktimer != INVALID_TIMER ) ? clif_set_unit_walking(bl,ud,buf) : clif_set_unit_idle(bl,buf,false);
+ 	clif_send(buf,len,&sd->bl,SELF);
+ 
+-	if (vd->cloth_color)
++	if( battle_config.fvf_change_ccolor && (fdb = faction_search(faction_get_id(bl))) != NULL )
++		clif_refreshlook(&sd->bl,bl->id,LOOK_CLOTHES_COLOR,(map[bl->m].flag.fvf || battle_config.fvf_change_ccolor == 2) ? fdb->ccolor : vd->cloth_color,SELF);
++	else if( vd->cloth_color )
+ 		clif_refreshlook(&sd->bl,bl->id,LOOK_CLOTHES_COLOR,vd->cloth_color,SELF);
+ 
+ 	switch (bl->type)
+@@ -4172,6 +4223,7 @@
+ 			clif_pet_equip(sd, (TBL_PET*)bl); // needed to display pet equip properly
+ 		break;
+ 	}
++	faction_getareachar_unit(sd, bl);
+ }
+ 
+ //Modifies the type of damage according to status changes [Skotlex]
+@@ -8395,8 +8447,13 @@
+ 		clif_spiritball_single(sd->fd, sd);
+ 	if (sd->spiritballnumber)
+ 		clif_spiritball_attribute_single(sd->fd, sd);
+-	if (sd->vd.cloth_color)
++	{
++		struct faction_data *fdb;
++		if( battle_config.fvf_change_ccolor && (fdb = faction_search(sd->status.faction_id)) != NULL )
++			clif_refreshlook(&sd->bl,sd->bl.id,LOOK_CLOTHES_COLOR,(map[sd->bl.m].flag.fvf || battle_config.fvf_change_ccolor == 2) ? fdb->ccolor : sd->vd.cloth_color,SELF);
++		else if (sd->vd.cloth_color)
+ 		clif_refreshlook(&sd->bl,sd->bl.id,LOOK_CLOTHES_COLOR,sd->vd.cloth_color,SELF);
++	}
+ 	if(merc_is_hom_active(sd->hd))
+ 		clif_send_homdata(sd,0,0);
+ 	if( sd->md )
+@@ -8416,6 +8473,8 @@
+ 		clif_clearunit_single(sd->bl.id,CLR_DEAD,sd->fd);
+ 	else
+ 		clif_changed_dir(&sd->bl, SELF);
++	if( sd->status.faction_id ) // Complete Faction System [Lilith]
++		faction_getareachar_unit(sd, &sd->bl);
+ 
+ #ifndef TXT_ONLY
+ 	mail_clear(sd);
+@@ -8427,13 +8486,16 @@
+ /// Updates the object's (bl) name on client (ZC_ACK_REQNAME/ZC_ACK_REQNAMEALL)
+ /// 0095 <unit id>.L <char name>.24B
+ /// 0195 <unit id>.L <char name>.24B <party name>.24B <guild name>.24B <position name>.24B
+-int clif_charnameack (int fd, struct block_list *bl)
++int clif_charnameack(struct map_session_data *sd, struct block_list *bl)
+ {
+ 	unsigned char buf[103];
+-	int cmd = 0x95, i, ps = -1;
++	int cmd = 0x95, i, ps = -1, fd = 0;
+ 
+ 	nullpo_ret(bl);
+ 
++	if( sd )
++		fd = sd->fd;
++
+ 	WBUFW(buf,0) = cmd;
+ 	WBUFL(buf,2) = bl->id;
+ 
+@@ -8444,11 +8506,19 @@
+ 			struct map_session_data *ssd = (struct map_session_data *)bl;
+ 			struct party_data *p = NULL;
+ 			struct guild *g = NULL;
++			struct faction_data *fdb = NULL;
+ 			
+ 			//Requesting your own "shadow" name. [Skotlex]
+ 			if (ssd->fd == fd && ssd->disguise)
+ 				WBUFL(buf,2) = -bl->id;
+ 
++			if( sd && map[sd->bl.m].flag.fvf && !faction_check_name(&sd->bl, bl) && (fdb = faction_search(ssd->status.faction_id)) != NULL ) {
++				WBUFW(buf, 0) = cmd = 0x195;
++				memcpy(WBUFP(buf,6), fdb->pl_name, NAME_LENGTH);
++				WBUFB(buf,30) = WBUFB(buf,54) = WBUFB(buf,78) = 0;
++				break;
++			}
++
+ 			if( ssd->fakename[0] )
+ 			{
+ 				WBUFW(buf, 0) = cmd = 0x195;
+@@ -8631,6 +8701,9 @@
+ 	}
+ 
+ 	// Update nearby clients
++	if( ssd->status.faction_id && map[ssd->bl.m].flag.fvf ) // Complete Faction System [Lilith]
++		clif_send(buf, packet_len(cmd), &ssd->bl, AREA_FVF);
++	else
+ 	clif_send(buf, packet_len(cmd), &ssd->bl, AREA);
+ 	return 0;
+ }
+@@ -9267,8 +9340,13 @@
+ 	clif_changelook(&sd->bl,LOOK_WEAPON,0);
+ #endif
+ 
+-	if(sd->vd.cloth_color)
++	{
++		struct faction_data *fdb = NULL;
++		if( battle_config.fvf_change_ccolor && (fdb = faction_search(sd->status.faction_id)) != NULL )
++			clif_refreshlook(&sd->bl,sd->bl.id,LOOK_CLOTHES_COLOR,(map[sd->bl.m].flag.fvf || battle_config.fvf_change_ccolor == 2) ? fdb->ccolor : sd->vd.cloth_color,SELF);
++		else if(sd->vd.cloth_color )
+ 		clif_refreshlook(&sd->bl,sd->bl.id,LOOK_CLOTHES_COLOR,sd->vd.cloth_color,SELF);
++	}
+ 
+ 	// item
+ 	clif_inventorylist(sd);  // inventory list first, otherwise deleted items in pc_checkitem show up as 'unknown item'
+@@ -9315,7 +9393,18 @@
+ 		clif_party_hp(sd); // Show hp after displacement [LuzZza]
+ 	}
+ 
+-	if( sd->state.bg_id ) clif_bg_hp(sd); // BattleGround System
++	if( sd->state.bg_id )
++		clif_bg_hp(sd); // BattleGround System
++ 
++	if( sd->status.faction_id ) { // Complete Faction System [Lilith]
++		if( map[sd->bl.m].flag.fvf ) {
++			faction_hp(sd);
++			clif_map_property(sd, MAPPROPERTY_AGITZONE);
++		}
++		if( faction_check_leader(sd) )
++			faction_factionaura(sd);
++	}
++
+ 	if( sd->state.changemap && map[sd->bl.m].flag.battleground )
+ 	{
+ 		clif_map_type(sd, MAPTYPE_BATTLEFIELD); // Battleground Mode
+@@ -9718,7 +9807,7 @@
+ 	}
+ 	*/
+ 
+-	clif_charnameack(fd, bl);
++	clif_charnameack(sd, bl);
+ }
+ 
+ /*==========================================
+@@ -9757,9 +9846,45 @@
+ 	WFIFOW(fd,2) = 8 + textlen;
+ 	WFIFOL(fd,4) = sd->bl.id;
+ 	safestrncpy((char*)WFIFOP(fd,8), text, textlen);
+-	//FIXME: chat has range of 9 only
+-	clif_send(WFIFOP(fd,0), WFIFOW(fd,2), &sd->bl, sd->chatID ? CHAT_WOS : AREA_CHAT_WOC);
++	if( !sd->chatID && faction_check_chat(sd) ) {// Faction System [Lilith]
++		struct faction_data* fdb = faction_search(sd->status.faction_id);
++		char *faction;
++		int faction_len = 0;
++		uint8 buf[256];
+ 
++		faction = (char*)aMalloc(strlen(fdb->pl_name)+messagelen+3);
++		strcpy(faction, fdb->pl_name);
++		strcat(strcat(faction, " : "), message);
++		faction_len = strlen(faction) + 1;
++
++		if( battle_config.faction_chat_settings&1 ) {
++			WBUFW(buf,0) = 0x2C1;
++			WBUFW(buf,2) = 12 + textlen;
++			WBUFL(buf,4) = sd->bl.id;
++			WBUFL(buf,8) = fdb->chat_color;
++			safestrncpy((char*)WBUFP(buf,12), text, textlen);
++			if( battle_config.faction_chat_settings&2 ) {
++				clif_send(buf, WBUFW(buf,2), &sd->bl, FACTION_AREA_WOS);
++
++				WBUFW(buf,2) = 12 + faction_len;
++				safestrncpy((char*)WBUFP(buf,12), faction, faction_len);
++				clif_send(buf, WBUFW(buf,2), &sd->bl, FVF_OTHER_AREA_CHAT);
++			} else
++				clif_send(buf, WBUFW(buf,2), &sd->bl, AREA_CHAT_WOC);
++		} else {
++			WBUFW(buf,0) = 0x8d;
++			WBUFW(buf,2) = 8 + textlen;
++			WBUFL(buf,4) = sd->bl.id;
++			safestrncpy((char*)WBUFP(buf,8), text, textlen);
++			clif_send(buf, WBUFW(buf,2), &sd->bl, FACTION_AREA_WOS);
++
++			WBUFW(buf,2) = 8 + faction_len;
++			safestrncpy((char*)WBUFP(buf,8), faction, faction_len);
++			clif_send(buf, WBUFW(buf,2), &sd->bl, FVF_OTHER_AREA_CHAT);
++		}
++	} else
++		clif_send(WFIFOP(fd,0), WFIFOW(fd,2), &sd->bl, sd->chatID ? CHAT_WOS : AREA_CHAT_WOC); //FIXME: chat has range of 9 only
++
+ 	// send back message to the speaker
+ 	memcpy(WFIFOP(fd,0), RFIFOP(fd,0), RFIFOW(fd,2));
+ 	WFIFOW(fd,0) = 0x8e;
+
+Property changes on: src/map/clif.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/clif.h
+===================================================================
+--- src/map/clif.h	(revision 747)
++++ src/map/clif.h	(working copy)
+@@ -77,6 +77,10 @@
+ 	BG_SAMEMAP_WOS,
+ 	BG_AREA,
+ 	BG_AREA_WOS,
++	FACTION_AREA_WOS, // Complete Faction System [Lilith]
++	AREA_FVF,
++	FVF_OTHER_AREA_CHAT,
++	FACTION,
+ } send_target;
+ 
+ typedef enum emotion_type
+@@ -408,7 +412,7 @@
+ int clif_wis_end(int fd,int flag);
+ 
+ int clif_solved_charname(int fd, int charid, const char* name);
+-int clif_charnameack(int fd, struct block_list *bl);
++int clif_charnameack(struct map_session_data *sd, struct block_list *bl);
+ int clif_charnameupdate(struct map_session_data *ssd);
+ 
+ int clif_use_card(struct map_session_data *sd,int idx);
+@@ -692,4 +696,6 @@
+ int clif_crimson_marker_xy_single(int fd, struct map_session_data *sd);
+ int clif_crimson_marker_xy_remove(struct map_session_data *sd);
+ 
++void clif_getareachar_unit(struct map_session_data* sd,struct block_list *bl);
++
+ #endif /* _CLIF_H_ */
+
+Property changes on: src/map/clif.h
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/faction.c
+===================================================================
+--- src/map/faction.c	(revision 0)
++++ src/map/faction.c	(working copy)
+@@ -0,0 +1,783 @@
++// Complete Faction System (c) Lilith
++// Ported from rAthena [15peaces]
++// Skype: amurov4shtefan
++// ICQ: 450327002
++// Gmail: amurov.ro@gmail.com
++// MSN: amurov.ro@hotmail.com
++
++#include "../common/db.h"
++#include "../common/malloc.h"
++#include "../common/socket.h"
++#include "../common/showmsg.h"
++#include "../common/strlib.h"
++#include "../common/nullpo.h"
++
++#include "atcommand.h"
++#include "faction.h"
++#include "elemental.h"
++#include "homunculus.h"
++#include "map.h"
++#include "mercenary.h"
++#include "mapreg.h"
++#include "mob.h"
++#include "npc.h"
++#include "pc.h"
++#include "pet.h"
++#include "skill.h"
++#include "status.h"
++#include "script.h"
++
++#include <stdio.h>
++#include <stdlib.h>
++
++static DBMap* faction_db; // int faction_id -> struct faction_data*
++static DBMap* voting_db; // int char_id -> struct voting_data*
++
++void faction_change_leader(int faction_id, int char_id)
++{
++	struct faction_data *fdb;
++	TBL_PC *sd = NULL, *new_sd = NULL;
++	struct skill_unit_group *group = NULL;
++	char output[CHAT_SIZE_MAX];
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++		return;
++
++	if( fdb->leader_id == char_id )
++		return;
++
++	if( (sd = map_charid2sd(fdb->leader_id)) ) {
++		if( sd->sc.data[SC_FACTION_AURA] && (group = skill_id2group(sd->sc.data[SC_FACTION_AURA]->val4)) ) {
++			skill_delunitgroup(group);
++			status_change_end(&sd->bl,SC_FACTION_AURA,INVALID_TIMER);
++		}
++	}
++
++	memset(output, '\0', sizeof(output));
++	sprintf(output, "$faction_leader_id_%d",faction_id);
++	mapreg_setreg(add_str(output), char_id);
++	fdb->leader_id = char_id;
++
++	if( (new_sd = map_charid2sd(char_id)) )
++		faction_factionaura(new_sd);
++}
++
++void faction_voting_add(struct map_session_data *sd, struct map_session_data *ssd, int votes)
++{
++	struct voting_data *vdb;
++
++	if( !ssd->status.faction_id )
++		return;
++
++	if( (vdb = voting_search(ssd->status.char_id)) == NULL ) {
++		CREATE(vdb,struct voting_data,1);
++		memcpy(vdb->name, ssd->status.name, NAME_LENGTH);
++		vdb->faction_id = ssd->status.faction_id;
++		vdb->char_id = ssd->status.char_id;
++		vdb->votes = votes;
++		idb_put(voting_db,ssd->status.char_id,vdb);
++
++	} else vdb->votes += votes;
++
++	if( sd ) {
++		if( (vdb = voting_search(sd->status.char_id)) == NULL ) {
++			CREATE(vdb,struct voting_data,1);
++			memcpy(vdb->name, sd->status.name, NAME_LENGTH);
++			vdb->faction_id = sd->status.faction_id;
++			vdb->char_id = sd->status.char_id;
++			vdb->voted = true;
++			idb_put(voting_db,sd->status.char_id,vdb);
++
++		} else vdb->voted = true;
++	}
++}
++
++void faction_voting_finish(int faction_id)
++{
++	struct faction_data *fdb;
++	struct voting_data *vdb = NULL;
++	int max = 0, char_id = 0, k = 0;
++	DBIterator *iter;
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++		return;
++
++	fdb->voting_active = false;
++
++	iter = db_iterator(voting_db);
++	for( vdb = dbi_first(iter); dbi_exists(iter); vdb = dbi_next(iter) ) {
++		if( vdb->faction_id == faction_id && vdb->votes > max ) {
++			max = vdb->votes;
++			char_id = vdb->char_id;
++		}
++		k++;
++	}
++	dbi_destroy(iter);
++
++	faction_change_leader(faction_id, char_id);
++}
++
++void faction_voting_start(int faction_id)
++{
++	struct faction_data *fdb;
++	struct voting_data *vdb;
++	DBIterator *iter;
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++		return;
++
++	iter = db_iterator(voting_db);
++	for( vdb = dbi_first(iter); dbi_exists(iter); vdb = dbi_next(iter) )
++		if( vdb->faction_id == faction_id )
++			idb_remove(voting_db,vdb->char_id);
++	dbi_destroy(iter);
++
++	fdb->voting_active = true;
++}
++
++void faction_voting_info(int faction_id)
++{
++	int j = 0;
++	struct voting_data *vdb = NULL;
++	DBIterator *iter = db_iterator(voting_db);
++	for( vdb = dbi_first(iter); dbi_exists(iter); vdb = dbi_next(iter) ) {
++		if( vdb->faction_id == faction_id ) {
++			mapreg_setreg(reference_uid(add_str("$@voting_charid"), j),vdb->char_id);
++			mapreg_setregstr(reference_uid(add_str("$@voting_charname$"), j),vdb->name);
++			mapreg_setreg(reference_uid(add_str("$@voting_votes"), j),vdb->votes);
++			mapreg_setreg(reference_uid(add_str("$@voting_voted"), j),vdb->voted);
++			j++;
++		}
++	}
++	dbi_destroy(iter);
++	mapreg_setreg(add_str("$@votinglist_count"),j);
++	return;
++}
++
++struct voting_data *voting_search(int char_id)
++{
++	return (struct voting_data*)idb_get(voting_db,char_id);
++}
++
++int faction_check_leader(struct map_session_data *sd)
++{
++	struct faction_data *fdb;
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL )
++		return 0;
++
++	return (fdb->leader_id == sd->status.char_id);
++}
++
++int faction_reload_fvf_sub(struct block_list *bl, va_list ap)
++{
++	if( !faction_get_id(bl) )
++		return 0;
++
++	switch( bl->type ) {
++		case BL_PC:
++			{
++				TBL_PC *sd = (TBL_PC*)bl;
++				status_calc_pc(sd,0);
++				if( !pc_isdead(sd) )
++					pc_setpos(sd, sd->mapindex, bl->x, bl->y, CLR_RESPAWN);
++			}
++		break;
++
++		case BL_NPC:
++		case BL_MOB:
++			{
++				struct status_change* sc = status_get_sc(bl);
++				if( sc->option&(OPTION_HIDE|OPTION_CLOAK|OPTION_CHASEWALK|OPTION_INVISIBLE) || sc->data[SC_CAMOUFLAGE] )
++					break;
++			}
++		default:
++			clif_spawn(bl);
++		break;
++	}
++	return 0;
++}
++
++int faction_relic_change_sub(struct map_session_data *sd, va_list ap)
++{
++	int faction_id = va_arg(ap,int);
++
++	if( !sd->status.faction_id || sd->status.faction_id != faction_id )
++		return 0;
++
++	faction_calc(&sd->bl);
++		return 0;
++}
++
++void faction_factionaura(struct map_session_data *sd)
++{
++	struct skill_unit_group *group = NULL;
++
++	if( sd->sc.data[SC_FACTION_AURA] && (group = skill_id2group(sd->sc.data[SC_FACTION_AURA]->val4)) ) {
++		skill_delunitgroup(group);
++		status_change_end(&sd->bl,SC_FACTION_AURA,INVALID_TIMER);
++	}
++
++	if( (group = skill_unitsetting(&sd->bl,FACTION_AURA,1,sd->bl.x,sd->bl.y,0)) != NULL )
++		sc_start4(&sd->bl,SC_FACTION_AURA,100,1,group->faction_id,0,group->group_id,600000);
++}
++
++void faction_calc(struct block_list *bl)
++{
++	struct faction_data *fdb;
++
++	if( (fdb = faction_search(faction_get_id(bl))) == NULL )
++		return;
++
++	if( bl->type == BL_PC ) {
++		TBL_PC *sd = (TBL_PC*)bl;
++		struct item_data *item_data = NULL;
++		struct status_change *sc = status_get_sc(bl);
++		int i;
++
++		if( fdb->script )
++			run_script(fdb->script,0,sd->bl.id,0);
++
++		if( sc && sc->data[SC_FACTION_AURA] && sc->data[SC_FACTION_AURA]->val2 && sc->data[SC_FACTION_AURA]->val2 == sd->status.faction_id ) {
++			struct faction_data *t_fdb = faction_search(sc->data[SC_FACTION_AURA]->val2);
++			if( t_fdb->aura_bonus )
++				run_script(t_fdb->aura_bonus,0,sd->bl.id,0);
++		}
++
++		for( i = 0; i < MAX_RELIC; i++ )
++			if( ((map[bl->m].faction.id == sd->status.faction_id && map[bl->m].faction.relic == i) || fdb->relic[i].active) &&
++				(item_data = itemdb_exists(fdb->relic[i].item_id)) && item_data->script )
++				run_script(item_data->script,0,sd->bl.id,0);
++	}
++
++	if( battle_config.faction_status_bl&bl->type ) {
++		struct status_data *status = bl->type == BL_MOB ? status_get_status_data(bl) : status_get_base_status(bl);
++
++		status->race 	= fdb->race;
++		status->def_ele	= fdb->ele;
++		status->ele_lv 	= fdb->ele_lvl;
++		status->size	= fdb->size;
++	}
++}
++
++void faction_hp(struct map_session_data *sd)
++{
++	uint8 buf[34];
++	const int cmd = 0x2e0;
++	nullpo_retv(sd);
++
++	WBUFW(buf,0) = cmd;
++	WBUFL(buf,2) = sd->status.account_id;
++	memcpy(WBUFP(buf,6), sd->status.name, NAME_LENGTH);
++
++	if( sd->battle_status.max_hp > INT16_MAX ) {
++		WBUFW(buf,30) = sd->battle_status.hp/(sd->battle_status.max_hp/100);
++		WBUFW(buf,32) = 100;
++	} else {
++		WBUFW(buf,30) = sd->battle_status.hp;
++		WBUFW(buf,32) = sd->battle_status.max_hp;
++	}
++	clif_send(buf, packet_len(cmd), &sd->bl, FACTION_AREA_WOS);
++}
++
++void faction_spawn(struct block_list *bl)
++{
++	struct faction_data *fdb;
++	uint8 buf[33];
++
++	if( (fdb = faction_search(faction_get_id(bl))) == NULL )
++		return;
++
++	if( map[bl->m].flag.fvf ) {
++		if( battle_config.faction_ally_info_bl ) {
++			if( battle_config.faction_ally_info_bl&bl->type ) {
++				WBUFW(buf, 0) = 0x2dd;
++				WBUFL(buf,2) = bl->id;
++				safestrncpy((char*)WBUFP(buf,6), status_get_name(bl), NAME_LENGTH);
++				WBUFW(buf,30) = faction_get_id(bl);
++				clif_send(buf,packet_len(0x2dd), bl, FVF_OTHER_AREA_CHAT);
++			}
++		} else {
++			WBUFW(buf,0) = 0x1b4;
++			WBUFL(buf,2) = bl->id;
++			WBUFL(buf,6) = fdb->id;
++			WBUFW(buf,10) = faction_check_leader(((TBL_PC*)bl)) ? fdb->l_emblem_id : fdb->emblem_id;
++			clif_send(buf, 12, bl, AREA_WOS);
++		}
++	}
++
++	if( battle_config.faction_size_bl&bl->type && ((battle_config.fvf_visual_size&1 && map[bl->m].flag.fvf) || battle_config.fvf_visual_size&2) ) {
++		if( fdb->size == 2 )
++			clif_specialeffect(bl,423,AREA);
++		else if( fdb->size == 1 )
++			clif_specialeffect(bl,421,AREA);
++	}
++
++	faction_show_aura(bl);
++}
++
++void faction_show_aura(struct block_list *bl)
++{
++	struct faction_data *fdb = faction_search(faction_get_id(bl));
++	struct status_change *sc = NULL;
++	int i;
++
++	if( bl->type&(BL_CHAR|BL_NPC) ) {
++		sc = status_get_sc(bl);
++		if( sc->option&(OPTION_HIDE|OPTION_CLOAK|OPTION_CHASEWALK|OPTION_INVISIBLE) || sc->data[SC_CAMOUFLAGE] )
++			return;
++	}
++
++	if( !((battle_config.faction_aura_settings&1 && map[bl->m].flag.fvf) || battle_config.faction_aura_settings&2) )
++		return;
++
++	if( battle_config.faction_aura_bl&bl->type ) {
++		for( i = 0; i < MAX_AURA_EFF; i++ )
++			if( fdb->aura[i] > 0 )
++				clif_specialeffect(bl, fdb->aura[i], AREA);
++	}
++}
++
++void faction_getareachar_unit(struct map_session_data *sd, struct block_list *bl)
++{
++	struct faction_data *fdb;
++	struct status_change *sc = NULL;
++	int i, fd;
++
++	if( !sd->status.faction_id || (fdb = faction_search(faction_get_id(bl))) == NULL )
++		return;
++
++	fd = sd->fd;
++	if( map[bl->m].flag.fvf ) {
++		if( battle_config.faction_ally_info_bl ) {
++			if( battle_config.faction_ally_info_bl&bl->type && !faction_check_alliance(&sd->bl, bl) ) {
++				WFIFOHEAD(fd,32);
++				WFIFOW(fd,0) = 0x2dd;
++				WFIFOL(fd,2) = bl->id;
++				safestrncpy((char*)WFIFOP(fd,6), status_get_name(bl), NAME_LENGTH);
++				WFIFOW(fd,30) = faction_get_id(bl);
++				WFIFOSET(fd,packet_len(0x2dd));
++			}
++		} else {
++			if( faction_check_leader(((TBL_PC*)bl)) ) {
++				WFIFOHEAD(fd,fdb->l_emblem_len+12);
++				WFIFOW(fd,2)=fdb->l_emblem_len+12;
++				WFIFOL(fd,8)=fdb->l_emblem_id;
++				memcpy(WFIFOP(fd,12),fdb->l_emblem_data,fdb->l_emblem_len);
++			} else {
++				WFIFOHEAD(fd,fdb->emblem_len+12);
++				WFIFOW(fd,2)=fdb->emblem_len+12;
++				WFIFOL(fd,8)=fdb->emblem_id;
++				memcpy(WFIFOP(fd,12),fdb->emblem_data,fdb->emblem_len);
++			}
++				WFIFOW(fd,0)=0x152;
++				WFIFOL(fd,4)=fdb->id;
++				WFIFOSET(fd,WFIFOW(fd,2));
++		}
++	}
++
++	if( battle_config.faction_size_bl&bl->type && ((battle_config.fvf_visual_size&1 && map[bl->m].flag.fvf) || battle_config.fvf_visual_size&2) ) {
++		if( fdb->size == 2 )
++			clif_specialeffect_single(bl,423,fd);
++		else if( fdb->size == 1 )
++			clif_specialeffect_single(bl,421,fd);
++	}
++
++	if( bl->type&(BL_CHAR|BL_NPC) ) {
++		sc = status_get_sc(bl);
++		if( sc->option&(OPTION_HIDE|OPTION_CLOAK|OPTION_CHASEWALK|OPTION_INVISIBLE) || sc->data[SC_CAMOUFLAGE] )
++			return;
++	}
++
++	if( !((battle_config.faction_aura_settings&1 && map[bl->m].flag.fvf) || battle_config.faction_aura_settings&2) )
++		return;
++
++	if( battle_config.faction_aura_bl&bl->type ) {
++		for( i = 0; i < MAX_AURA_EFF; i++ )
++			if( fdb->aura[i] > 0 )
++				clif_specialeffect_single(bl, fdb->aura[i], fd);
++	}
++}
++
++int faction_aura_clear(struct block_list *bl,va_list ap)
++{
++	struct map_session_data *sd = BL_CAST(BL_PC,bl);
++	struct block_list *tbl = va_arg(ap,struct block_list*);
++
++	if( bl == tbl )
++		return 0;
++
++	clif_getareachar_unit(sd,tbl);
++	return 0;
++}
++
++int faction_check_alliance(struct block_list *bl, struct block_list *t_bl)
++{
++	struct faction_data *fdb = NULL, *t_fdb = NULL;
++	int i;
++
++	if( (fdb = faction_search(faction_get_id(bl))) == NULL ||
++		(t_fdb = faction_search(faction_get_id(t_bl))) == NULL )
++		return 0;
++
++	if( faction_get_id(bl) == faction_get_id(t_bl) )
++		return 1;
++
++	ARR_FIND( 0, MAX_FACTION_ALLIANCE, i, (fdb->alliance[i] == faction_get_id(t_bl) || t_fdb->alliance[i] == faction_get_id(bl)) );
++	if( i < MAX_FACTION_ALLIANCE )
++		return 1;	
++
++	return 0;
++}
++
++struct faction_data *faction_search(int id)
++{
++	return (struct faction_data*)idb_get(faction_db,id);
++}
++
++int faction_get_id(struct block_list *bl)
++{
++	if( bl )
++	switch( bl->type ) {
++		case BL_PC:			// Player
++			return ((TBL_PC*)bl)->status.faction_id;
++		case BL_PET:		// Pet
++			if( ((TBL_PET*)bl)->msd )
++				return ((TBL_PET*)bl)->msd->status.faction_id;
++		case BL_MOB:		// Monster
++		{
++			struct map_session_data *msd;
++			struct mob_data *md = (TBL_MOB*)bl;
++			if( md->special_state.ai && (msd = map_id2sd(md->master_id)) != NULL )
++				return msd->status.faction_id;
++			return md->faction_id;
++		}
++		case BL_NPC:		// NPC
++			return ((TBL_NPC*)bl)->faction_id;
++		case BL_HOM:		// Homunculus
++			if( ((TBL_HOM*)bl)->master )
++				return ((TBL_HOM*)bl)->master->status.faction_id;
++		case BL_MER:		// Mercenary
++			if( ((TBL_MER*)bl)->master )
++				return ((TBL_MER*)bl)->master->status.faction_id;
++		case BL_ELEM:		// Elemental
++			if( ((TBL_ELEM*)bl)->master )
++				return ((TBL_ELEM*)bl)->master->status.faction_id;
++		case BL_SKILL:		// Skill
++			return ((TBL_SKILL*)bl)->group->faction_id;
++		default:
++			break;
++	}
++	return 0;
++}
++
++// ID,Faction Name,Faction Player name,Location,X,Y,Race,Element,Element lvl,Size,Clothes Color,Color of mes,{ Aura: #1 #2 #3 },{ Script Bonus },{ Faction Aura Script Bonus }
++static int faction_readdb(void)
++{
++	struct faction_data *fdb;
++	const char *filename = "faction_db.txt";
++	uint32 lines = 0, count = 0;
++	char line[1024], path[256];
++	FILE *fp;
++	void *aChSysSave = NULL;
++
++	sprintf(path, "%s/%s", db_path, filename);
++	if((fp = fopen(path, "r")) == NULL ) {
++		ShowWarning("faction_readdb: File not found \"%s\", skipping.\n", path);
++		return 0;
++	}
++
++	while(fgets(line, sizeof(line), fp)) {
++		char *str[14], *p, *p_tmp, map[MAP_NAME_LENGTH], out[100];
++		int i, id, race, ele, ele_lvl, size, x, y, k = 0, ccolor;
++		int aura[MAX_AURA_EFF];
++		unsigned long chat_color;
++		uint16 mapindex = -1;
++		FILE *fp2 = NULL;
++
++		lines++;
++		if(line[0] == '/' && line[1] == '/')
++			continue;
++		memset(out, 0, sizeof(out));
++		memset(map, 0, sizeof(map));
++		memset(aura, 0, sizeof(aura));
++		memset(str, 0, sizeof(str));
++
++		p = line;
++
++		while( ISSPACE(*p) )
++			++p;
++		if( *p == '\0' )
++			continue;
++		for( i = 0; i < 12; ++i ) {
++			str[i] = p;
++			p = strchr(p,',');
++			if( p == NULL )
++				break;
++			*p = '\0';
++			++p;
++		}
++
++		if( p == NULL ) {
++			ShowError("faction_readdb: Insufficient columns in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++
++		id = atoi(str[0]);
++		if( id < 1 || id > MAX_FACTION ) {
++			ShowError("faction_readdb : Incorrect Faction ID: %d, must be between 0 and %d\n", id, MAX_FACTION);
++			continue;
++		} else if( faction_search(id) ) {
++			ShowError("faction_readdb : Duplicate Faction ID %d, line %d.\n", id, lines);
++			continue;
++		}
++
++		safestrncpy(map,str[3],MAP_NAME_LENGTH);
++		if( map[0] != '\0' && (mapindex = mapindex_name2id(map)) < 0 ) {
++			ShowWarning("faction_readdb: Invalid map: '%s' in line %d of \"%s\" (faction id %d).\n", map, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb: removing home location...\n");
++			memset(map, '\0', sizeof(map));
++		}
++
++		if( mapindex >= 0 ) {
++			x = atoi(str[4]);
++			if( x < 0 || x > 512 ) {
++				ShowWarning("faction_readdb : Invalid X coordinate: %d, in line %d of \"%s\" (faction id %d).\n", x, lines, path, atoi(str[0]));
++				ShowWarning("faction_readdb : X must be between 0 and 512. Default to 0.\n");
++				x = 0;
++			}
++
++			y = atoi(str[5]);
++			if( y < 0 || y > 512 ) {
++				ShowWarning("faction_readdb : Invalid Y coordinate: %d, in line %d of \"%s\" (faction id %d).\n", y, lines, path, atoi(str[0]));
++				ShowWarning("faction_readdb : Y must be between 0 and 512. Default to 0.\n");
++				y = 0;
++			}
++		} else x = y = 0;
++
++		race = atoi(str[6]);
++		if( race < RC_FORMLESS || race > RC_DRAGON ) {
++			ShowWarning("faction_readdb : Invalid race: %d, in line %d of \"%s\" (faction id %d).\n", race, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb : race must be between %d and %d. Default to %d.\n", RC_FORMLESS, RC_DRAGON, RC_DEMIHUMAN);
++			race = RC_DEMIHUMAN;
++		}
++
++		ele = atoi(str[7]);
++		if( ele < ELE_NEUTRAL || ele > ELE_UNDEAD ) {
++			ShowWarning("faction_readdb : Invalid element: %d, in line %d of \"%s\" (faction id %d).\n", ele, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb : element must be between %d and %d. Default to %d.\n", ELE_NEUTRAL, ELE_UNDEAD, ELE_NEUTRAL);
++			ele = ELE_NEUTRAL;
++		}
++
++		ele_lvl = atoi(str[8]);
++		if( ele_lvl < 1 || ele_lvl > 4 ) {
++			ShowWarning("faction_readdb : Invalid element level: %d, in line %d of \"%s\" (faction id %d).\n", ele_lvl, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb : element must be between 1 and 4. Default to 1.\n");
++			ele_lvl = 1;
++		}
++
++		size = atoi(str[9]);
++		if( size < 0 || size > 2 ) {
++			ShowWarning("faction_readdb : Invalid size: %d, in line %d of \"%s\" (faction id %d).\n", size, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb : size must be 0, 1 or 2. Default to 0.\n");
++			size = 0;
++		}
++
++		ccolor = atoi(str[10]);
++		if( ccolor < battle_config.min_cloth_color || ccolor > battle_config.max_cloth_color ) {
++			ShowWarning("faction_readdb : Invalid clothes color: %d, in line %d of \"%s\" (faction id %d).\n", ccolor, lines, path, atoi(str[0]));
++			ShowWarning("faction_readdb : clothes color must be between %d and %d. Default to %d.\n", battle_config.min_cloth_color, battle_config.max_cloth_color, battle_config.min_cloth_color);
++			ccolor = battle_config.min_cloth_color;
++		}
++
++		chat_color = strtoul(str[11],NULL,0);
++		chat_color = ( chat_color&0x0000FF ) << 16 | ( chat_color&0x00FF00 ) | ( chat_color&0xFF0000 ) >> 16;
++
++		if( *p != '{' ) {
++			ShowError("faction_readdb: Invalid format in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++		p_tmp = p;
++		p_tmp = strchr(p_tmp+1,'#');
++		for( i = 0; i < MAX_AURA_EFF && p_tmp; i++ ) {
++			if( !sscanf(p_tmp, "%d", &aura[k]) && !sscanf(p_tmp, "#%d", &aura[k]) )
++			{
++				ShowWarning("faction_readdb: Error parsing aura effects in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++				p_tmp = strchr(p_tmp+1,'#');
++				continue;
++			}
++			p_tmp = strchr(p_tmp+1,'#');
++			k++;
++		}
++		p = strstr(p+1,"},");
++		if( p == NULL ) {
++			ShowError("faction_readdb: Invalid format (Faction Bonus column) in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++		p[1] = '\0';
++		p += 2;
++		if( *p != '{' ) {
++			ShowError("faction_readdb: Invalid format (Faction Bonus column) in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++		str[12] = p;
++		p = strstr(p+1,"},");
++		if( p == NULL ) {
++			ShowError("faction_readdb: Invalid format (Faction Bonus column) in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++		p[1] = '\0';
++		p += 2;
++		if( *p != '{' ) {
++			ShowError("faction_readdb: Invalid format (Faction Aura Bonus column) in line %d of \"%s\" (faction id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++		str[13] = p;
++		p = strstr(p+1,"}");
++		if ( strchr(p,',') != NULL ) {
++			ShowError("faction_readdb: Extra columns in line %d of \"%s\" (faction with id %d), skipping.\n", lines, path, atoi(str[0]));
++			continue;
++		}
++
++		CREATE(fdb,struct faction_data,1);
++		fdb->id = id;
++		safestrncpy(fdb->name,str[1],sizeof(fdb->name));
++		safestrncpy(fdb->pl_name,str[2],sizeof(fdb->pl_name));
++		memcpy(fdb->map, map, MAP_NAME_LENGTH);
++		fdb->x = x;
++		fdb->y = y;
++		fdb->race = race;
++		fdb->ele = ele;
++		fdb->ele_lvl = ele_lvl;
++		fdb->size = size;
++		fdb->ccolor = ccolor;
++		fdb->chat_color = chat_color;
++		memcpy(&fdb->aura, &aura, sizeof(fdb->aura));
++		fdb->script = parse_script(str[12],path,lines,0);
++		fdb->aura_bonus = parse_script(str[13],path,lines,0);
++		for( i = 0; i < MAX_RELIC; i++ ) {
++			sprintf(out, "$faction_relics_%d",id);
++			fdb->relic[i].item_id = mapreg_readreg(reference_uid(add_str(out), i));
++		}
++		sprintf(out, "$faction_leader_id_%d",id);
++		fdb->leader_id = mapreg_readreg(add_str(out));
++
++		fdb->emblem_id = 1;
++		sprintf(path, "db/faction_emblem/faction_id_%d.ebm", id);
++		if( (fp2 = fopen(path, "rb")) != NULL ) {
++			fseek(fp2, 0, SEEK_END);
++			fdb->emblem_len = ftell(fp2);
++			fseek(fp2, 0, SEEK_SET);
++			fread(&fdb->emblem_data, sizeof(fdb->emblem_data), 1, fp2);
++			fclose(fp2);
++		} else memset(fdb->emblem_data, 0, sizeof(fdb->emblem_data));
++
++		fdb->l_emblem_id = 2;
++		sprintf(path, "db/faction_emblem/faction_id_%d_leader.ebm", id);
++		if( (fp2 = fopen(path, "rb")) != NULL ) {
++			fseek(fp2, 0, SEEK_END);
++			fdb->l_emblem_len = ftell(fp2);
++			fseek(fp2, 0, SEEK_SET);
++			fread(&fdb->l_emblem_data, sizeof(fdb->l_emblem_data), 1, fp2);
++			fclose(fp2);
++		} else memset(fdb->l_emblem_data, 0, sizeof(fdb->l_emblem_data));
++
++		idb_put(faction_db,id,fdb);
++		count++;
++	}
++	fclose(fp);
++	ShowStatus("Done reading '"CL_WHITE"%lu"CL_RESET"' factions in file '"CL_WHITE"%s"CL_RESET"'.\n", count, filename);
++
++	return 0;
++}
++
++static bool faction_read_alliance(char *str[], int columns, int current)
++{
++	struct faction_data *fdb, *t_fdb = NULL;
++	int faction_id, alliance, i, k = 0;
++	char *tmp;
++
++	faction_id = atoi(str[0]);
++	if( ( fdb = faction_search(faction_id) ) == NULL ) {
++		ShowWarning("faction_read_alliance: Invalid faction id %d.\n", faction_id);
++		return false;
++	}
++	tmp = str[1];
++	for( i = 0; i < MAX_FACTION_ALLIANCE && tmp; i++ ) {
++		if( !sscanf(tmp, "%d", &alliance) && !sscanf(tmp, ":%d", &alliance) ) {
++			ShowError("faction_read_alliance: Parsing error.\n");
++			continue;
++		}
++		if( (t_fdb = faction_search(alliance)) == NULL ) {
++			ShowWarning("faction_read_alliance: Invalid alliance faction id %d.\n", alliance);
++			tmp = strchr(tmp+1,':');
++			continue;
++		}
++		tmp = strchr(tmp+1,':');
++		fdb->alliance[k] = alliance;
++		k++;
++	}
++	return true;
++}
++
++static void destroy_faction_data(struct faction_data *self, int free_self)
++{
++	if( self == NULL )
++		return;
++	if( self->script )
++		script_free_code(self->script);
++	if( self->aura_bonus )
++		script_free_code(self->aura_bonus);
++	if( free_self )
++		aFree(self);
++}
++
++static int faction_final_sub(DBKey key, void *data, va_list ap)
++{
++	struct faction_data *fdb = (struct faction_data*)data;
++
++	if( fdb != NULL )
++		destroy_faction_data(fdb, 1);
++
++	return 0;
++}
++
++static int voting_final_sub(DBKey key, void *data, va_list ap)
++{
++	struct voting_data *vdb = (struct voting_data*)data;
++
++	if( vdb != NULL )
++		aFree(vdb);
++
++	return 0;
++}
++
++void faction_read(void)
++{
++	faction_readdb();
++	sv_readdb(db_path, "faction_alliance.txt",',', 2, 2, -1, &faction_read_alliance);
++}
++
++void do_reload_faction(void)
++{
++	faction_db->clear(faction_db,faction_final_sub);
++	faction_read();
++	map_foreachiddb(faction_reload_fvf_sub);
++}
++
++void do_init_faction(void)
++{
++	faction_db 	= idb_alloc(DB_OPT_BASE);
++	voting_db 	= idb_alloc(DB_OPT_BASE);
++	faction_read();
++}
++
++void do_final_faction(void)
++{
++	DBIterator *iter = db_iterator(faction_db);
++
++	dbi_destroy(iter);
++
++	voting_db->destroy(voting_db,voting_final_sub);
++	faction_db->destroy(faction_db,faction_final_sub);
++}
+\ No newline at end of file
+
+Property changes on: src/map/faction.c
+___________________________________________________________________
+Added: svn:eol-style
+## -0,0 +1 ##
++native
+\ No newline at end of property
+Index: src/map/faction.h
+===================================================================
+--- src/map/faction.h	(revision 0)
++++ src/map/faction.h	(working copy)
+@@ -0,0 +1,102 @@
++// Complete Faction System (c) Lilith
++// Ported from rAthena [15peaces]
++// Skype: amurov4shtefan
++// ICQ: 450327002
++// Gmail: amurov.ro@gmail.com
++// MSN: amurov.ro@hotmail.com
++
++#ifndef _FACTION_H_
++#define _FACTION_H_
++
++#include "../common/mmo.h"
++#include "unit.h"
++
++// Max factions
++#define MAX_FACTION 6
++// Max alliances of each faction
++#define MAX_FACTION_ALLIANCE 3
++// Max effects for faction aura
++#define MAX_AURA_EFF 3
++// Max relics of each faction
++#define MAX_RELIC 5
++
++// Voting data
++struct voting_data {
++	int char_id, faction_id, votes;
++	char name[NAME_LENGTH];
++	bool voted;
++};
++
++// Faction data
++struct faction_data {
++	int id;
++	int alliance[MAX_FACTION_ALLIANCE];
++	char name[NAME_LENGTH];
++	char pl_name[NAME_LENGTH];
++	char map[MAP_NAME_LENGTH];
++	uint16 x, y, ccolor;
++	int leader_id;
++	int race, ele, ele_lvl, size;
++	int aura[MAX_AURA_EFF];
++	unsigned long chat_color;
++	struct script_code *script;
++	struct script_code *aura_bonus;
++	bool voting_active;
++
++	int emblem_len, emblem_id;
++	char emblem_data[2048];
++
++	int l_emblem_len, l_emblem_id;
++	char l_emblem_data[2048];
++
++	struct {
++		uint16 item_id;
++		bool active;
++	} relic[MAX_RELIC];
++	void *channel;
++};
++
++#define faction_check_chat(sd) ( (sd)->status.faction_id>0 && map[(sd)->bl.m].flag.fvf && battle_config.faction_chat_settings )
++
++#define faction_check_hp(sd,dstsd) ( (sd)->status.faction_id>0 && map[(dstsd)->bl.m].flag.fvf && battle_config.fvf_hp_bar && \
++		(sd)->status.faction_id == (dstsd)->status.faction_id )
++
++#define faction_check_name(src,tbl) ( faction_get_id(src) && faction_get_id(tbl) && \
++		battle_config.faction_chat_settings&2 && (faction_check_alliance(src,tbl) || \
++		status_get_party_id(src)>0 && status_get_party_id(src) == status_get_party_id(tbl) || \
++		status_get_guild_id(src)>0 && status_get_guild_id(src) == status_get_guild_id(tbl)) )
++
++#define faction_check_skill_use(src,tbl) ( battle_config.faction_heal_settings && battle_config.faction_heal_bl&(tbl)->type && \
++		((battle_config.faction_heal_settings&1 && faction_get_id(src) == faction_get_id(tbl)) || \
++		(battle_config.faction_heal_settings&2 && faction_check_alliance(src,tbl)) || \
++		(status_get_party_id(src)>0 && status_get_party_id(src) == status_get_party_id(tbl)) || \
++		(status_get_guild_id(src)>0 && status_get_guild_id(src) == status_get_guild_id(tbl))) )
++
++void faction_change_leader(int, int);
++void faction_voting_add(struct map_session_data *, struct map_session_data *, int);
++void faction_voting_finish(int);
++void faction_voting_start(int);
++void faction_voting_info(int);
++struct voting_data *voting_search(int);
++
++int faction_check_leader(struct map_session_data *);
++
++int faction_reload_fvf_sub(struct block_list *,va_list);
++int faction_relic_change_sub(struct map_session_data *, va_list);
++
++void faction_factionaura(struct map_session_data *);
++void faction_calc(struct block_list *);
++void faction_hp(struct map_session_data *);
++void faction_spawn(struct block_list *);
++void faction_show_aura(struct block_list *);
++void faction_getareachar_unit(struct map_session_data *, struct block_list *);
++int faction_aura_clear(struct block_list *,va_list);
++int faction_check_alliance(struct block_list *, struct block_list *);
++struct faction_data *faction_search(int);
++int faction_get_id(struct block_list *);
++
++void do_reload_faction(void);
++void do_init_faction(void);
++void do_final_faction(void);
++
++#endif /* _FACTION_H_ */
+\ No newline at end of file
+
+Property changes on: src/map/faction.h
+___________________________________________________________________
+Added: svn:eol-style
+## -0,0 +1 ##
++native
+\ No newline at end of property
+Index: src/map/guild.c
+===================================================================
+--- src/map/guild.c	(revision 747)
++++ src/map/guild.c	(working copy)
+@@ -577,6 +577,16 @@
+ 	if(tsd==NULL || g==NULL)
+ 		return 0;
+ 
++	if( sd->status.faction_id && tsd->status.faction_id ) {
++		if( battle_config.faction_guild_settings == 1 && !faction_check_alliance(&sd->bl,&tsd->bl) ) {
++			clif_displaymessage(sd->fd, "You cannot invite to guild non-alliance faction members.");
++			return 0;
++		} else if( !battle_config.faction_guild_settings && sd->status.faction_id != tsd->status.faction_id ) {
++			clif_displaymessage(sd->fd, "You cannot invite to guild of members of the other faction.");
++			return 0;
++		}
++	}
++
+ 	if( (i=guild_getposition(g,sd))<0 || !(g->position[i].mode&0x0001) )
+ 		return 0; //Invite permission.
+ 
+
+Property changes on: src/map/guild.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/homunculus.c
+===================================================================
+--- src/map/homunculus.c	(revision 747)
++++ src/map/homunculus.c	(working copy)
+@@ -636,7 +636,7 @@
+ 		return 0;
+ 	}
+ 	strncpy(hd->homunculus.name,name,NAME_LENGTH);
+-	clif_charnameack (0,&hd->bl);
++	clif_charnameack (NULL,&hd->bl);
+ 	hd->homunculus.rename_flag = 1;
+ 	clif_hominfo(sd,hd,0);
+ 	return 1;
+Index: src/map/log.c
+===================================================================
+--- src/map/log.c	(revision 747)
++++ src/map/log.c	(working copy)
+@@ -348,12 +348,13 @@
+ 	// 0 = Don't log at all
+ 	// 1 = Log EVERYTHING!
+ 	// Advanced Filter Bits: ||
+-	// 02 - Log Global messages
+-	// 04 - Log Whisper messages
+-	// 08 - Log Party messages
+-	// 16 - Log Guild messages
+-	// 32 - Log Main chat messages
+-	// 64 - Don't log anything when WOE is on
++	// 002 - Log Global messages
++	// 004 - Log Whisper messages
++	// 008 - Log Party messages
++	// 016 - Log Guild messages
++	// 032 - Log Main chat messages
++	// 064 - Log Faction chat messages
++	// 128 - Don't log anything when WOE is on
+ 
+ 	//Check ON/OFF
+ 	if(log_config.chat <= 0)
+Index: src/map/Makefile.in
+===================================================================
+--- src/map/Makefile.in	(revision 747)
++++ src/map/Makefile.in	(working copy)
+@@ -18,7 +18,7 @@
+ 	storage.o skill.o atcommand.o battle.o battleground.o \
+ 	intif.o trade.o party.o vending.o guild.o pet.o \
+ 	log.o mail.o date.o unit.o homunculus.o mercenary.o elemental.o quest.o instance.o \
+-	buyingstore.o searchstore.o
++	buyingstore.o searchstore.o faction.o
+ MAP_TXT_OBJ = $(MAP_OBJ:%=obj_txt/%) \
+ 	obj_txt/mapreg_txt.o
+ MAP_SQL_OBJ = $(MAP_OBJ:%=obj_sql/%) \
+@@ -28,7 +28,7 @@
+ 	storage.h skill.h atcommand.h battle.h battleground.h \
+ 	intif.h trade.h party.h vending.h guild.h pet.h \
+ 	log.h mail.h date.h unit.h homunculus.h mercenary.h elemental.h quest.h instance.h mapreg.h \
+-	buyingstore.h searchstore.h
++	buyingstore.h searchstore.h faction.h
+ 
+ HAVE_MYSQL=@HAVE_MYSQL@
+ ifeq ($(HAVE_MYSQL),yes)
+Index: src/map/map.c
+===================================================================
+--- src/map/map.c	(revision 747)
++++ src/map/map.c	(working copy)
+@@ -46,6 +46,8 @@
+ #ifndef TXT_ONLY
+ #include "mail.h"
+ #endif
++#include "faction.h" // Complete Faction System [Lilith]
++
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -404,6 +406,8 @@
+ 			if (sc->data[SC_PROPERTYWALK] &&
+ 				sc->data[SC_PROPERTYWALK]->val3 >= skill_get_maxcount(sc->data[SC_PROPERTYWALK]->val1,sc->data[SC_PROPERTYWALK]->val2) )
+ 				status_change_end(bl,SC_PROPERTYWALK,-1);
++			if( bl->type == BL_PC && faction_check_leader(((TBL_PC*)bl)) && sc->data[SC_FACTION_AURA] ) // Complete Faction System [Lilith]
++					skill_unit_move_unit_group(skill_id2group(sc->data[SC_FACTION_AURA]->val4), bl->m, x1-x0, y1-y0);
+ 		}
+ 	} else
+ 	if (bl->type == BL_NPC)
+@@ -1797,6 +1801,7 @@
+ 		status_change_end(&sd->bl, SC_KAZEHU_SEIRAN, INVALID_TIMER);
+ 		status_change_end(&sd->bl, SC_DOHU_KOUKAI, INVALID_TIMER);
+ 		status_change_end(&sd->bl, SC_KYOUGAKU, INVALID_TIMER);//Not official, but needed since logging back in crashes the client. Will fix later. [Rytech]
++		status_change_end(&sd->bl, SC_FACTION_AURA, INVALID_TIMER); // Complete Faction System [Lilith]
+ 
+ 		if( battle_config.debuff_on_logout&1 )
+ 		{
+@@ -2603,6 +2608,8 @@
+ 			return (cell.nochat);
+ 		case CELL_CHKMAELSTROM:
+ 			return (cell.maelstrom);
++		case CELL_CHKNOFVF: // Complete Faction System [Lilith]
++			return (cell.nofvf);
+ 
+ 		// special checks
+ 		case CELL_CHKPASS:
+@@ -2656,6 +2663,7 @@
+ 		case CELL_NOVENDING:     map[m].cell[j].novending = flag;     break;
+ 		case CELL_NOCHAT:        map[m].cell[j].nochat = flag;        break;
+ 		case CELL_MAELSTROM:	 map[m].cell[j].maelstrom = flag;	  break;
++		case CELL_NOFVF:		 map[m].cell[j].nofvf = flag;		  break; // Complete Faction System [Lilith]
+ 		default:
+ 			ShowWarning("map_setcell: invalid cell type '%d'\n", (int)cell);
+ 			break;
+@@ -3010,6 +3018,8 @@
+ 		// adjustments
+ 		if( battle_config.pk_mode )
+ 			map[i].flag.pvp = 1; // make all maps pvp for pk_mode [Valaris]
++		if( battle_config.fvf_in_all_maps )
++			map[i].flag.fvf = 1;
+ 	}
+ }
+ 
+@@ -3664,6 +3674,7 @@
+ 	do_final_unit();
+ 	do_final_battleground();
+ 	do_final_elemental();
++	do_final_faction(); // Complete Faction System [Lilith]
+ 	
+ 	map_db->destroy(map_db, map_db_final);
+ 	
+@@ -3897,6 +3908,7 @@
+ 	do_init_mercenary();
+ 	do_init_elemental();
+ 	do_init_quest();
++	do_init_faction(); // Complete Faction System [Lilith]
+ 	do_init_npc();
+ 	do_init_unit();
+ 	do_init_battleground();
+
+Property changes on: src/map/map.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/map.h
+===================================================================
+--- src/map/map.h	(revision 747)
++++ src/map/map.h	(working copy)
+@@ -215,7 +215,7 @@
+ #define DEFAULT_AUTOSAVE_INTERVAL 5*60*1000
+ 
+ //Specifies maps where players may hit each other
+-#define map_flag_vs(m) (map[m].flag.pvp || map[m].flag.gvg_dungeon || map[m].flag.gvg || ((agit_flag || agit2_flag) && map[m].flag.gvg_castle) || map[m].flag.battleground)
++#define map_flag_vs(m) (map[m].flag.pvp || map[m].flag.gvg_dungeon || map[m].flag.gvg || ((agit_flag || agit2_flag) && map[m].flag.gvg_castle) || map[m].flag.battleground || map[m].flag.fvf)
+ //Specifies maps that have special GvG/WoE restrictions
+ #define map_flag_gvg(m) (map[m].flag.gvg || ((agit_flag || agit2_flag) && map[m].flag.gvg_castle))
+ //Specifies if the map is tagged as GvG/WoE (regardless of agit_flag status)
+@@ -316,6 +316,7 @@
+ 	unsigned short num; //Number of mobs using this structure
+ 	unsigned short active; //Number of mobs that are already spawned (for mob_remove_damaged: no)
+ 	unsigned int delay1,delay2; //Min delay before respawning after spawn/death
++	unsigned int faction_id;
+ 	struct {
+ 		unsigned size :2; //Holds if mob has to be tiny/large
+ 		unsigned ai :2;	//Holds if mob is special ai.
+@@ -351,6 +352,7 @@
+ 	SP_BASECLASS=120,	//Hmm.. why 100+19? I just use the next one... [Skotlex]
+ 	SP_KILLERRID=121,
+ 	SP_KILLEDRID=122,
++	SP_FACTION=123,
+ 
+ 	// Mercenaries
+ 	SP_MERCFLEE=165, SP_MERCKILLS=189, SP_MERCFAITH=190,
+@@ -429,6 +431,7 @@
+ 	CELL_NOVENDING,
+ 	CELL_NOCHAT,
+ 	CELL_MAELSTROM,
++	CELL_NOFVF, // Complete Faction System [Lilith]
+ } cell_t;
+ 
+ // used by map_getcell()
+@@ -451,6 +454,7 @@
+ 	CELL_CHKNOVENDING,
+ 	CELL_CHKNOCHAT,
+ 	CELL_CHKMAELSTROM,
++	CELL_CHKNOFVF, // Complete Faction System [Lilith]
+ } cell_chk;
+ 
+ struct mapcell
+@@ -468,7 +472,8 @@
+ 		landprotector : 1,
+ 		novending : 1,
+ 		nochat : 1,
+-		maelstrom : 1;
++		maelstrom : 1,
++		nofvf : 1; // Complete Faction System [Lilith]
+ 
+ #ifdef CELL_NOSTACK
+ 	unsigned char cell_bl; //Holds amount of bls in this cell.
+@@ -542,6 +547,7 @@
+ 		unsigned nochat :1;
+ 		unsigned partylock :1;
+ 		unsigned guildlock :1;
++		unsigned fvf :1; // Complete Faction System [Lilith]
+ 		unsigned src4instance : 1; // To flag this map when it's used as a src map for instances
+ 	} flag;
+ 	struct point save;
+@@ -552,6 +558,11 @@
+ 		int drop_per;
+ 	} drop_list[MAX_DROP_PER_MAP];
+ 
++	struct {
++		int id;
++		int relic;
++	} faction;
++
+ 	struct spawn_data *moblist[MAX_MOB_LIST_PER_MAP]; // [Wizputer]
+ 	int mob_delete_timer;	// [Skotlex]
+ 	int zone;	// zone number (for item/skill restrictions)
+
+Property changes on: src/map/map.h
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/mob.c
+===================================================================
+--- src/map/mob.c	(revision 747)
++++ src/map/mob.c	(working copy)
+@@ -235,6 +235,8 @@
+ 	md->spawn_timer = INVALID_TIMER;
+ 	md->deletetimer = INVALID_TIMER;
+ 	md->skillidx = -1;
++	if( data->faction_id )
++		md->faction_id = data->faction_id;
+ 	status_set_viewdata(&md->bl, md->class_);
+ 	status_change_init(&md->bl);
+ 	unit_dataset(&md->bl);
+@@ -460,10 +462,11 @@
+ /*==========================================
+  * Spawn mobs in the specified area.
+  *------------------------------------------*/
+-int mob_once_spawn_area(struct map_session_data* sd,int m,int x0,int y0,int x1,int y1,const char* mobname,int class_,int amount,const char* event)
++int mob_once_spawn_area(struct map_session_data* sd,int m,int x0,int y0,int x1,int y1,const char* mobname,int class_,int amount,const char* event, int faction_id)
+ {
+ 	int i,max,id=0;
+ 	int lx=-1,ly=-1;
++	struct mob_data *md = NULL;
+ 
+ 	if (m < 0 || amount <= 0)
+ 		return 0; // invalid input
+@@ -505,7 +508,11 @@
+ 		ly = y;
+ 
+ 		id = mob_once_spawn(sd,m,x,y,mobname,class_,1,event);
++		if( faction_id && (md = (TBL_MOB*)map_id2bl(id)) ) {
++			md->faction_id = faction_id;
++			clif_spawn(&md->bl);
+ 	}
++	}
+ 
+ 	return id; // id of last spawned mob
+ }
+@@ -980,6 +987,9 @@
+ 	if ((mode&MD_TARGETWEAK) && status_get_lv(bl) >= md->level-5)
+ 		return 0;
+ 
++	if( md->faction_id && !map[bl->m].flag.fvf && !(status_get_mode(&md->bl)&MD_AGGRESSIVE) )
++		return 0;
++
+ 	if(battle_check_target(&md->bl,bl,BCT_ENEMY)<=0)
+ 		return 0;
+ 
+@@ -1444,7 +1454,7 @@
+ 		map_foreachinrange (mob_ai_sub_hard_lootsearch, &md->bl, view_range, BL_ITEM, md, &tbl);
+ 	}
+ 
+-	if ((!tbl && mode&MD_AGGRESSIVE) || md->state.skillstate == MSS_FOLLOW)
++	if ((!tbl && (mode&MD_AGGRESSIVE || md->faction_id)) || md->state.skillstate == MSS_FOLLOW)
+ 	{
+ 		map_foreachinrange (mob_ai_sub_hard_activesearch, &md->bl, view_range, DEFAULT_ENEMY_TYPE(md), md, &tbl, mode);
+ 	}
+@@ -1960,7 +1970,7 @@
+ 	}
+ 
+ 	if (battle_config.show_mob_info&3)
+-		clif_charnameack (0, &md->bl);
++		clif_charnameack (NULL, &md->bl);
+ 	
+ 	if (!src)
+ 		return;
+@@ -2511,7 +2521,7 @@
+ 	skill_unit_move(&md->bl,tick,1);
+ 	mobskill_use(md, tick, MSC_SPAWN);
+ 	if (battle_config.show_mob_info&3)
+-		clif_charnameack (0, &md->bl);
++		clif_charnameack (NULL, &md->bl);
+ }
+ 
+ int mob_guardian_guildchange(struct block_list *bl,va_list ap)
+@@ -2660,7 +2670,7 @@
+ void mob_heal(struct mob_data *md,unsigned int heal)
+ {
+ 	if (battle_config.show_mob_info&3)
+-		clif_charnameack (0, &md->bl);
++		clif_charnameack (NULL, &md->bl);
+ }
+ 
+ /*==========================================
+@@ -2737,6 +2747,7 @@
+ 	data.num = 1;
+ 	data.state.size = md2->special_state.size;
+ 	data.state.ai = md2->special_state.ai;
++	data.faction_id = md2->faction_id;
+ 
+ 	if(mobdb_checkid(value[0]) == 0)
+ 		return 0;
+@@ -2865,6 +2876,9 @@
+ 
+ 	if (md->special_state.ai) //Summoned creatures. [Skotlex]
+ 		type = BL_PC;
++
++	if( md->faction_id )
++		type = BL_CHAR;
+ 	
+ 	map_foreachinrange(mob_getfriendhprate_sub, &md->bl, 8, type,md,min_rate,max_rate,&fr);
+ 	return fr;
+@@ -2921,9 +2935,14 @@
+ struct mob_data *mob_getfriendstatus(struct mob_data *md,int cond1,int cond2)
+ {
+ 	struct mob_data* fr = NULL;
++	int type = BL_MOB;
++
+ 	nullpo_ret(md);
+ 
+-	map_foreachinrange(mob_getfriendstatus_sub, &md->bl, 8,BL_MOB, md,cond1,cond2,&fr);
++	if( md->faction_id )
++		type = BL_CHAR;
++
++	map_foreachinrange(mob_getfriendstatus_sub, &md->bl, 8,type, md,cond1,cond2,&fr);
+ 	return fr;
+ }
+ 
+
+Property changes on: src/map/mob.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/mob.h
+===================================================================
+--- src/map/mob.h	(revision 747)
++++ src/map/mob.h	(working copy)
+@@ -35,7 +35,7 @@
+ #define MOB_CLONE_END MAX_MOB_DB
+ 
+ //Used to determine default enemy type of mobs (for use in eachinrange calls)
+-#define DEFAULT_ENEMY_TYPE(md) (md->special_state.ai?BL_CHAR:BL_PC|BL_HOM|BL_MER)
++#define DEFAULT_ENEMY_TYPE(md) ((md->special_state.ai || md->faction_id)?BL_CHAR:BL_PC|BL_HOM|BL_MER)
+ 
+ //Externals for the status effects. [Epoque]
+ extern const int mob_manuk[8];
+@@ -161,6 +161,8 @@
+ 	short skillidx;
+ 	unsigned int skilldelay[MAX_MOBSKILL];
+ 	char npc_event[50];
++
++	int faction_id; // Complete Faction System [Lilith]
+ };
+ 
+ 
+@@ -225,7 +227,7 @@
+ struct mob_data *mob_once_spawn_sub(struct block_list *bl, int m,
+ 	short x, short y, const char *mobname, int class_, const char *event);
+ int mob_once_spawn(struct map_session_data* sd,int m,short x,short y,const char* mobname,int class_,int amount,const char* event);
+-int mob_once_spawn_area(struct map_session_data* sd,int m,int x0,int y0,int x1,int y1,const char* mobname,int class_,int amount,const char* event);
++int mob_once_spawn_area(struct map_session_data* sd,int m,int x0,int y0,int x1,int y1,const char* mobname,int class_,int amount,const char* event,int faction_id);
+ 
+ bool mob_ksprotected (struct block_list *src, struct block_list *target);
+ 
+Index: src/map/npc.c
+===================================================================
+--- src/map/npc.c	(revision 747)
++++ src/map/npc.c	(working copy)
+@@ -1073,6 +1073,17 @@
+ 	if (nd->class_ < 0 || nd->sc.option&(OPTION_INVISIBLE|OPTION_HIDE))
+ 		return 1;
+ 
++	if( sd->status.faction_id && nd->faction_id ) {
++		if( battle_config.faction_npc_settings == 1 && !faction_check_alliance(&sd->bl,&nd->bl) )
++		{
++			clif_displaymessage(sd->fd, "You cannot use NPC of non-alliance faction.");
++			return 1;
++		} else if( !battle_config.faction_npc_settings && sd->status.faction_id != nd->faction_id ) {
++			clif_displaymessage(sd->fd, "You cannot use NPC of other factions.");
++			return 1;
++		}
++	}
++
+ 	switch(nd->subtype) {
+ 	case SHOP:
+ 		clif_npcbuysell(sd,nd->bl.id);
+@@ -1321,7 +1332,7 @@
+ 				return 2;
+ 		}
+ 
+-		value = pc_modifybuyvalue(sd,value);
++		value = pc_modifybuyvalue(sd,nd,value);
+ 
+ 		z += (double)value * amount;
+ 		w += itemdb_weight(nameid) * amount;
+@@ -1892,17 +1903,22 @@
+ 	char *p;
+ 	int x, y, dir, m, i;
+ 	struct npc_data *nd;
++	struct faction_data *fdb = NULL;
+ 	enum npc_subtype type;
+ 
+-	if( strcmp(w1,"-") == 0 )
++	char *t_p;
++	int faction_id = 0, faction_id2 = 0, discount = 0;
++	int t_discount[MAX_FACTION];
++	memset(t_discount, 0, sizeof(t_discount));
++	if( w1[0] == '-' )
+ 	{// 'floating' shop?
+ 		x = y = dir = 0;
+ 		m = -1;
+ 	}
+ 	else
+-	{// w1=<map name>,<x>,<y>,<facing>
++	{// w1=<map name>,<x>,<y>,<facing>[,<Faction ID>]
+ 		char mapname[32];
+-		if( sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4
++		if( (sscanf(w1, "%31[^,],%d,%d,%d,%d", mapname, &x, &y, &dir, &faction_id) != 5 && sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4)
+ 		||	strchr(w4, ',') == NULL )
+ 		{
+ 			ShowError("npc_parse_shop: Invalid shop definition in file '%s', line '%d'.\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+@@ -1916,7 +1932,34 @@
+ 		type = CASHSHOP;
+ 	else
+ 		type = SHOP;
++	if( (p = strchr(w1,',[')) != NULL ) // [<Faction ID>:<Discount>]
++	{
++		if( (t_p = strchr(w1,']')) != NULL )
++		{
++			p++;
++			for( i = 0; i < MAX_FACTION && p; i++ )
++			{
++				if( sscanf(p, "%d:%d", &faction_id2, &discount) != 2 && sscanf(p, ",%d:%d", &faction_id2, &discount) != 2 )
++				{
++					ShowError("npc_parse_shop: Invalid discount definition in file '%s', line '%d'. Ignoring the rest of the line...\n * w1=%s\n", filepath, strline(buffer,start-buffer), w1);
++					break;
++				}
+ 
++				if( (fdb = faction_search(faction_id2)) == NULL)
++				{
++					ShowWarning("npc_parse_shop: Invalid faction ID in file '%s', line '%d' (id '%d').\n", filepath, strline(buffer,start-buffer), faction_id2);
++					p = strchr(p+1,',');
++					continue;
++				}
++
++				cap_value(discount,battle_config.faction_disc_min,battle_config.faction_disc_max);
++				t_discount[faction_id2-1] = discount;
++				p = strchr(p+1,',');
++			}
++		}
++		else ShowWarning("npc_parse_shop: Invalid format: ']' column not found in file '%s', line '%d' .\n", filepath, strline(buffer,start-buffer));
++	}
++
+ 	p = strchr(w4,',');
+ 	for( i = 0; i < ARRAYLENGTH(items) && p; ++i )
+ 	{
+@@ -1963,6 +2006,7 @@
+ 	CREATE(nd, struct npc_data, 1);
+ 	CREATE(nd->u.shop.shop_item, struct npc_item_list, i);
+ 	memcpy(nd->u.shop.shop_item, items, sizeof(struct npc_item_list)*i);
++	memcpy(nd->u.shop.discount, t_discount, sizeof(t_discount));
+ 	nd->u.shop.count = i;
+ 	nd->bl.prev = nd->bl.next = NULL;
+ 	nd->bl.m = m;
+@@ -1973,6 +2017,7 @@
+ 	nd->class_ = m==-1?-1:atoi(w4);
+ 	nd->speed = 200;
+ 
++	nd->faction_id = faction_id;
+ 	++npc_shop;
+ 	nd->bl.type = BL_NPC;
+ 	nd->subtype = type;
+@@ -2114,6 +2159,8 @@
+ 	struct npc_label_list* label_list;
+ 	int label_list_num;
+ 	struct npc_data* nd;
++	int faction_id = 0;
++	struct faction_data *fdb = NULL;
+ 
+ 	if( strcmp(w1, "-") == 0 )
+ 	{// floating npc
+@@ -2123,7 +2170,7 @@
+ 	}
+ 	else
+ 	{// npc in a map
+-		if( sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4 )
++		if( sscanf(w1, "%31[^,],%d,%d,%d,%d", mapname, &x, &y, &dir, &faction_id) != 5 && sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4 )
+ 		{
+ 			ShowError("npc_parse_script: Invalid placement format for a script in file '%s', line '%d'. Skipping the rest of file...\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+ 			return NULL;// unknown format, don't continue
+@@ -2153,6 +2200,11 @@
+ 		label_db->foreach(label_db, npc_convertlabel_db, &label_list, &label_list_num, filepath);
+ 		label_db->clear(label_db, NULL); // not needed anymore, so clear the db
+ 	}
++	if( faction_id && (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("npc_parse_script: Invalid faction ID '%d'in file '%s', line '%d'.\n Defaulting to 0.\n", faction_id, filepath, strline(buffer,start-buffer));
++		faction_id = 0;
++	}
+ 
+ 	CREATE(nd, struct npc_data, 1);
+ 
+@@ -2180,6 +2232,7 @@
+ 	nd->u.scr.label_list = label_list;
+ 	nd->u.scr.label_list_num = label_list_num;
+ 
++	nd->faction_id = faction_id;
+ 	++npc_script;
+ 	nd->bl.type = BL_NPC;
+ 	nd->subtype = SCRIPT;
+@@ -2260,10 +2313,10 @@
+ 
+ /// Duplicate a warp, shop, cashshop or script. [Orcao]
+ /// warp: <map name>,<x>,<y>,<facing>%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<spanx>,<spany>
+-/// shop/cashshop/npc: -%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>
+-/// shop/cashshop/npc: <map name>,<x>,<y>,<facing>%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>
++/// shop/cashshop/npc: -[,Faction ID:%%]%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>
++/// shop/cashshop/npc: <map name>,<x>,<y>,<facing>[,Faction ID[,Faction ID:%%]]%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>
+ /// npc: -%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
+-/// npc: <map name>,<x>,<y>,<facing>%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
++/// npc: <map name>,<x>,<y>,<facing>[,Faction ID]%TAB%duplicate(<name of target>)%TAB%<NPC Name>%TAB%<sprite id>,<triggerX>,<triggerY>
+ const char* npc_parse_duplicate(char* w1, char* w2, char* w3, char* w4, const char* start, const char* buffer, const char* filepath)
+ {
+ 	int x, y, dir, m, xs = -1, ys = -1, class_ = 0;
+@@ -2277,6 +2330,8 @@
+ 	int type;
+ 	struct npc_data* nd;
+ 	struct npc_data* dnd;
++	int faction_id = 0;
++	struct faction_data *fdb = NULL;
+ 
+ 	end = strchr(start,'\n');
+ 	length = strlen(w2);
+@@ -2305,7 +2360,7 @@
+ 	}
+ 	else
+ 	{
+-		if( sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4 )// <map name>,<x>,<y>,<facing>
++		if( (type != WARP && sscanf(w1, "%31[^,],%d,%d,%d,%d", mapname, &x, &y, &dir, &faction_id) != 5) && sscanf(w1, "%31[^,],%d,%d,%d", mapname, &x, &y, &dir) != 4 )// <map name>,<x>,<y>,<facing>[,<Faction ID>]
+ 		{
+ 			ShowError("npc_parse_duplicate: Invalid placement format for duplicate in file '%s', line '%d'. Skipping line...\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+ 			return end;// next line, try to continue
+@@ -2321,6 +2376,11 @@
+ 		ShowError("npc_parse_duplicate: Invalid span format for duplicate warp in file '%s', line '%d'. Skipping line...\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+ 		return end;// next line, try to continue
+ 	}
++	if( faction_id && (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowError("npc_parse_duplicate: Invalid faction ID '%d' in file '%s', line '%d'. Defaulting to 0,\n", faction_id, filepath, strline(buffer,start-buffer));
++		faction_id = 0;
++	}
+ 
+ 	CREATE(nd, struct npc_data, 1);
+ 
+@@ -2335,6 +2395,7 @@
+ 	nd->src_id = src_id;
+ 	nd->bl.type = BL_NPC;
+ 	nd->subtype = type;
++	nd->faction_id = faction_id;
+ 	switch( type )
+ 	{
+ 	case SCRIPT:
+@@ -2351,6 +2412,7 @@
+ 		++npc_shop;
+ 		nd->u.shop.shop_item = dnd->u.shop.shop_item;
+ 		nd->u.shop.count = dnd->u.shop.count;
++		memcpy(nd->u.shop.discount, dnd->u.shop.discount, sizeof(dnd->u.shop.discount));
+ 		break;
+ 
+ 	case WARP:
+@@ -2613,7 +2675,7 @@
+ 	nullpo_retv(nd);
+ 
+ 	safestrncpy(nd->name, newname, sizeof(nd->name));
+-	clif_charnameack(0, &nd->bl);
++	clif_charnameack(NULL, &nd->bl);
+ }
+ 
+ /// Changes the display class of the npc.
+@@ -2699,13 +2761,15 @@
+ 	struct spawn_data mob, *data;
+ 	struct mob_db* db;
+ 
++	int faction_id = 0;
++	struct faction_data *fdb = NULL;
+ 	memset(&mob, 0, sizeof(struct spawn_data));
+ 
+ 	mob.boss = !strcmpi(w2,"boss_monster");
+ 
+-	// w1=<map name>,<x>,<y>,<xs>,<ys>
++	// w1=<map name>,<x>,<y>,<xs>,<ys>[,<Faction ID>]
+ 	// w4=<mob id>,<amount>,<delay1>,<delay2>,<event>
+-	if( sscanf(w1, "%31[^,],%d,%d,%d,%d", mapname, &x, &y, &xs, &ys) < 3
++	if( (sscanf(w1, "%31[^,],%d,%d,%d,%d,%d", mapname, &x, &y, &xs, &ys, &faction_id) < 4 && sscanf(w1, "%31[^,],%d,%d,%d,%d", mapname, &x, &y, &xs, &ys) < 3)
+ 	||	sscanf(w4, "%d,%d,%u,%u,%127[^\t\r\n]", &class_, &num, &mob.delay1, &mob.delay2, mob.eventname) < 2 )
+ 	{
+ 		ShowError("npc_parse_mob: Invalid mob definition in file '%s', line '%d'.\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+@@ -2727,6 +2791,12 @@
+ 		return strchr(start,'\n');// skip and continue
+ 	}
+ 
++	if( faction_id && (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("npc_parse_script: Invalid faction ID '%d'in file '%s', line '%d'.\n Defaulting to 0.", faction_id, filepath, strline(buffer,start-buffer));
++		faction_id = 0;
++	}
++
+ 	// check monster ID if exists!
+ 	if( mobdb_checkid(class_) == 0 )
+ 	{
+@@ -2747,6 +2817,7 @@
+ 	mob.y = (unsigned short)y;
+ 	mob.xs = (signed short)xs;
+ 	mob.ys = (signed short)ys;
++	mob.faction_id = faction_id;
+ 
+ 	if (mob.num > 1 && battle_config.mob_count_rate != 100) {
+ 		if ((mob.num = mob.num * battle_config.mob_count_rate / 100) < 1)
+@@ -2940,7 +3011,12 @@
+ 			map[m].flag.battleground = 0;
+ 			ShowWarning("npc_parse_mapflag: You can't set GvG and BattleGround flags for the same map! Removing BattleGround flag from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
+ 		}
++		if( state && map[m].flag.fvf ) // Faction System [Lilith]
++		{
++			map[m].flag.fvf = 0;
++			ShowWarning("npc_parse_mapflag: You can't set PvP and FvF flags for the same map! Removing FvF flag from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
+ 	}
++	}
+ 	else if (!strcmpi(w3,"pvp_noparty"))
+ 		map[m].flag.pvp_noparty=state;
+ 	else if (!strcmpi(w3,"pvp_noguild"))
+@@ -2989,7 +3065,12 @@
+ 			map[m].flag.battleground = 0;
+ 			ShowWarning("npc_parse_mapflag: You can't set PvP and BattleGround flags for the same map! Removing BattleGround flag from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
+ 		}
++		if( state && map[m].flag.fvf ) // Faction System [Lilith]
++		{
++			map[m].flag.fvf = 0;
++			ShowWarning("npc_parse_mapflag: You can't set GvG and FvF flags for the same map! Removing FvF flag from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
+ 	}
++	}
+ 	else if (!strcmpi(w3,"gvg_noparty"))
+ 		map[m].flag.gvg_noparty=state;
+ 	else if (!strcmpi(w3,"gvg_dungeon")) {
+@@ -3105,6 +3186,36 @@
+ 	}
+ 	else if (!strcmpi(w3,"loadevent"))
+ 		map[m].flag.loadevent=state;
++	else if (!strcmpi(w3,"fvf")) { // Faction System [Lilith]
++		if( state )
++		{
++			int relic = -1;
++			map[m].flag.fvf = 1;
++			if( sscanf(w4, "%d,%d", &state, &relic) == 2 || sscanf(w4, "%d", &state) == 1 )
++			{
++				map[m].faction.id = state;
++				map[m].faction.relic = relic;
++			}
++		} else {
++			map[m].flag.fvf = 0;
++			map[m].faction.id = 0;
++			map[m].faction.relic = -1;
++		}
++
++		if( map[m].flag.fvf && ( map[m].flag.pvp || map[m].flag.battleground ) )
++		{
++			map[m].flag.pvp = 0;
++			map[m].flag.battleground = 0;
++			ShowWarning("npc_parse_mapflag: You can't set FvF and PvP or BG flags for the same map! Removing PvP and BG flags from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
++		}
++		if( map[m].flag.fvf && (map[m].flag.gvg || map[m].flag.gvg_dungeon || map[m].flag.gvg_castle) )
++		{
++			map[m].flag.gvg = 0;
++			map[m].flag.gvg_dungeon = 0;
++			map[m].flag.gvg_castle = 0;
++			ShowWarning("npc_parse_mapflag: You can't set FvF and GvG flags for the same map! Removing GvG flag from %s (file '%s', line '%d').\n", map[m].name, filepath, strline(buffer,start-buffer));
++		}
++	}
+ 	else if (!strcmpi(w3,"nochat"))
+ 		map[m].flag.nochat=state;
+ 	else if (!strcmpi(w3,"partylock"))
+@@ -3198,7 +3309,7 @@
+ 			break;
+ 		}
+ 
+-		if( strcmp(w1,"-") !=0 && strcasecmp(w1,"function") != 0 )
++		if( w1[0] != '-' && strcasecmp(w1,"function") != 0 )
+ 		{// w1 = <map name>,<x>,<y>,<facing>
+ 			char mapname[2048];
+ 			sscanf(w1,"%[^,]",mapname);
+
+Property changes on: src/map/npc.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/npc.h
+===================================================================
+--- src/map/npc.h	(revision 747)
++++ src/map/npc.h	(working copy)
+@@ -7,6 +7,7 @@
+ #include "map.h" // struct block_list
+ #include "status.h" // struct status_change
+ #include "unit.h" // struct unit_data
++#include "faction.h" // Complete Faction System [Lilith]
+ struct block_list;
+ struct npc_data;
+ struct view_data;
+@@ -37,6 +38,7 @@
+ 	int touching_id;
+ 	unsigned int next_walktime;
+ 
++	int faction_id;
+ 	unsigned size : 2;
+ 
+ 	void* chatdb; // pointer to a npc_parse struct (see npc_chat.c)
+@@ -56,6 +58,7 @@
+ 		struct {
+ 			struct npc_item_list* shop_item;
+ 			int count;
++			int discount[MAX_FACTION];
+ 		} shop;
+ 		struct {
+ 			short xs,ys; // OnTouch area radius
+Index: src/map/party.c
+===================================================================
+--- src/map/party.c	(revision 747)
++++ src/map/party.c	(working copy)
+@@ -22,6 +22,7 @@
+ #include "skill.h"
+ #include "status.h"
+ #include "itemdb.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -324,6 +325,18 @@
+ 		clif_displaymessage(sd->fd, msg_txt(81));
+ 		return 0;
+ 	}
++
++	if( sd->status.faction_id && tsd && tsd->status.faction_id )
++	{
++		if( battle_config.faction_party_settings == 1 && !faction_check_alliance(&sd->bl,&tsd->bl) )
++		{
++			clif_displaymessage(sd->fd, msg_txt(833));
++			return 0;
++		} else if( !battle_config.faction_party_settings && sd->status.faction_id != tsd->status.faction_id ) {
++			clif_displaymessage(sd->fd, msg_txt(832));
++			return 0;
++		}
++	}
+ 	
+ 	//Only leader can invite.
+ 	ARR_FIND(0, MAX_PARTY, i, p->data[i].sd == sd);
+
+Property changes on: src/map/party.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/pc.c
+===================================================================
+--- src/map/pc.c	(revision 747)
++++ src/map/pc.c	(working copy)
+@@ -37,6 +37,7 @@
+ #include "status.h" // struct status_data
+ #include "pc.h"
+ #include "quest.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -3569,9 +3570,9 @@
+ /*==========================================
+  * スキルによる買い値修正
+  *------------------------------------------*/
+-int pc_modifybuyvalue(struct map_session_data *sd,int orig_value)
++int pc_modifybuyvalue(struct map_session_data *sd, struct npc_data *nd ,int orig_value)
+ {
+-	int skill,val = orig_value,rate1 = 0,rate2 = 0;
++	int skill,val = orig_value,rate1 = 0,rate2 = 0, mod = 0;
+ 	if((skill=pc_checkskill(sd,MC_DISCOUNT))>0)	// ディスカウント
+ 		rate1 = 5+skill*2-((skill==10)? 1:0);
+ 	if((skill=pc_checkskill(sd,RG_COMPULSION))>0)	// コムパルションディスカウント
+@@ -3579,6 +3580,8 @@
+ 	if(rate1 < rate2) rate1 = rate2;
+ 	if(rate1)
+ 		val = (int)((double)orig_value*(double)(100-rate1)/100.);
++	if( sd->status.faction_id && (mod = nd->u.shop.discount[sd->status.faction_id-1]) )
++		val = (int)((double)orig_value*(double)(100+mod)/100.);
+ 	if(val < 0) val = 0;
+ 	if(orig_value > 0 && val < 1) val = 1;
+ 
+@@ -6590,7 +6593,7 @@
+ 
+ 			if( battle_config.show_mob_info&4 )
+ 			{// update name with new level
+-				clif_charnameack(0, &md->bl);
++			clif_charnameack(NULL, &md->bl);
+ 			}
+ 		}
+ 		src = battle_get_master(src); // Maybe Player Summon
+@@ -6824,6 +6827,9 @@
+ 	pc_setstand(sd);
+ 	if(battle_config.pc_invincible_time > 0)
+ 		pc_setinvincibletimer(sd, battle_config.pc_invincible_time);
++
++	if( sd->status.faction_id && faction_check_leader(sd) ) // Complete Faction System [Lilith]
++		faction_factionaura(sd);
+ }
+ // script? 連
+ //
+@@ -6870,6 +6876,7 @@
+ 	case SP_FAME:        val = sd->status.fame; break;
+ 	case SP_KILLERRID:   val = sd->killerrid; break;
+ 	case SP_KILLEDRID:   val = sd->killedrid; break;
++	case SP_FACTION:   	 val = sd->status.faction_id; break;
+ 	}
+ 
+ 	return val;
+@@ -6996,6 +7003,12 @@
+ 	case SP_KILLEDRID:
+ 		sd->killedrid = val;
+ 		return 1;
++	case SP_FACTION:
++		sd->status.faction_id = cap_value(val, 1, MAX_FACTION);
++		status_calc_pc(sd,0);
++		if( map[sd->bl.m].flag.fvf )
++			pc_setpos(sd, sd->mapindex, sd->bl.x, sd->bl.y, CLR_RESPAWN);
++		return 1;
+ 	default:
+ 		ShowError("pc_setparam: Attempted to set unknown parameter '%d'.\n", type);
+ 		return 0;
+
+Property changes on: src/map/pc.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/pc.h
+===================================================================
+--- src/map/pc.h	(revision 747)
++++ src/map/pc.h	(working copy)
+@@ -717,7 +717,7 @@
+ int pc_steal_item(struct map_session_data *sd,struct block_list *bl, int skilllv);
+ int pc_steal_coin(struct map_session_data *sd,struct block_list *bl);
+ 
+-int pc_modifybuyvalue(struct map_session_data*,int);
++int pc_modifybuyvalue(struct map_session_data*,struct npc_data *nd, int);
+ int pc_modifysellvalue(struct map_session_data*,int);
+ 
+ int pc_follow(struct map_session_data*, int); // [MouseJstr]
+Index: src/map/pet.c
+===================================================================
+--- src/map/pet.c	(revision 747)
++++ src/map/pet.c	(working copy)
+@@ -636,7 +636,7 @@
+ 		return 0;
+ 	}
+ 	memcpy(pd->pet.name, name, NAME_LENGTH);
+-	clif_charnameack (0,&pd->bl);
++	clif_charnameack (NULL,&pd->bl);
+ 	pd->pet.rename_flag = 1;
+ 	clif_pet_equip_area(pd);
+ 	clif_send_petstatus(sd);
+Index: src/map/script.c
+===================================================================
+--- src/map/script.c	(revision 747)
++++ src/map/script.c	(working copy)
+@@ -47,6 +47,7 @@
+ #include "mail.h"
+ #include "script.h"
+ #include "quest.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -149,9 +150,6 @@
+ /// Returns the type of param
+ #define reference_getparamtype(data) ( str_data[reference_getid(data)].val )
+ 
+-/// Composes the uid of a reference from the id and the index
+-#define reference_uid(id,idx) ( (int32)((((uint32)(id)) & 0x00ffffff) | (((uint32)(idx)) << 24)) )
+-
+ #define not_server_variable(prefix) ( (prefix) != '$' && (prefix) != '.' && (prefix) != '\'')
+ #define not_array_variable(prefix) ( (prefix) != '$' && (prefix) != '@' && (prefix) != '.' && (prefix) != '\'' )
+ #define is_string_variable(name) ( (name)[strlen(name) - 1] == '$' )
+@@ -344,7 +342,8 @@
+ 	MF_ALLOWKS,
+ 	MF_MONSTER_NOTELEPORT,
+ 	MF_PVP_NOCALCRANK,	//50
+-	MF_BATTLEGROUND
++	MF_BATTLEGROUND,
++	MF_FVF, // 52 Complete Faction System [Lilith]
+ };
+ 
+ const char* script_op2name(int op)
+@@ -6319,6 +6318,7 @@
+ 	case 2: script_pushint(st,sd->status.guild_id); break;
+ 	case 3: script_pushint(st,sd->status.account_id); break;
+ 	case 4: script_pushint(st,sd->state.bg_id); break;
++	case 5: script_pushint(st,sd->status.faction_id); break; // Complete Faction System [Lilith]
+ 	default:
+ 		ShowError("buildin_getcharid: invalid parameter (%d).\n", num);
+ 		script_pushint(st,0);
+@@ -6522,6 +6522,15 @@
+ 		case 3:
+ 			script_pushconststr(st,map[sd->bl.m].name);
+ 			break;
++		case 4:
++			{
++				struct faction_data* fdb; // Complete Faction System [Lilith]
++				if( ( fdb = faction_search(sd->status.faction_id) ) != NULL )
++					script_pushstrcopy(st,fdb->pl_name);
++				else
++					script_pushconststr(st,"");
++				break;
++			}
+ 		default:
+ 			ShowWarning("buildin_strcharinfo: unknown parameter.\n");
+ 			script_pushconststr(st,"");
+@@ -8170,7 +8179,7 @@
+ 		}
+ 	}
+ 	
+-	mob_once_spawn_area(sd,m,x0,y0,x1,y1,str,class_,amount,event);
++	mob_once_spawn_area(sd,m,x0,y0,x1,y1,str,class_,amount,event,0);
+ 	return 0;
+ }
+ /*==========================================
+@@ -9756,9 +9765,12 @@
+ {
+ 	int m,i;
+ 	const char *str;
++	int val = 0;
+ 
+ 	str=script_getstr(st,2);
+ 	i=script_getnum(st,3);
++	if(script_hasdata(st,4))
++		val=script_getnum(st,4);
+ 
+ 	m = map_mapname2mapid(str);
+ 	if(m >= 0) {
+@@ -9812,6 +9824,7 @@
+ 			case MF_MONSTER_NOTELEPORT:	script_pushint(st,map[m].flag.monster_noteleport); break;
+ 			case MF_PVP_NOCALCRANK:		script_pushint(st,map[m].flag.pvp_nocalcrank); break;
+ 			case MF_BATTLEGROUND:		script_pushint(st,map[m].flag.battleground); break;
++			case MF_FVF:				script_pushint(st,val?map[m].faction.id:map[m].flag.fvf); break; // Complete Faction System [Lilith]
+ 		}
+ 	}
+ 
+@@ -9823,6 +9836,7 @@
+ 	int m,i;
+ 	const char *str;
+ 	const char *val=NULL;
++	int val2=0;
+ 
+ 	str=script_getstr(st,2);
+ 	i=script_getnum(st,3);
+@@ -9829,6 +9843,8 @@
+ 	if(script_hasdata(st,4)){
+ 		val=script_getstr(st,4);
+ 	}
++	if(script_hasdata(st,5))
++		val2=script_getnum(st,5);
+ 	m = map_mapname2mapid(str);
+ 	if(m >= 0) {
+ 		switch(i) {
+@@ -9881,6 +9897,13 @@
+ 			case MF_MONSTER_NOTELEPORT:	map[m].flag.monster_noteleport=1; break;
+ 			case MF_PVP_NOCALCRANK:		map[m].flag.pvp_nocalcrank=1; break;
+ 			case MF_BATTLEGROUND:		map[m].flag.battleground = (!val || atoi(val) < 0 || atoi(val) > 2) ? 1 : atoi(val); break;
++			case MF_FVF: // Complete Faction System [Lilith]
++				map[m].flag.fvf = 1;
++				map[m].faction.id = val;
++				map[m].faction.relic = val2;
++				clif_map_property_mapall(m, MAPPROPERTY_FREEPVPZONE);
++				map_foreachinmap(faction_reload_fvf_sub, m, BL_ALL);
++				break;
+ 		}
+ 	}
+ 
+@@ -9947,6 +9970,12 @@
+ 			case MF_MONSTER_NOTELEPORT:	map[m].flag.monster_noteleport=0; break;
+ 			case MF_PVP_NOCALCRANK:		map[m].flag.pvp_nocalcrank=0; break;
+ 			case MF_BATTLEGROUND:		map[m].flag.battleground=0; break;
++			case MF_FVF: // Complete Faction System [Lilith]
++				map[m].flag.fvf = 0;
++				map[m].faction.id = 0;
++				clif_map_property_mapall(m, MAPPROPERTY_NOTHING);
++				map_foreachinmap(faction_reload_fvf_sub, m, BL_ALL);
++				break;
+ 		}
+ 	}
+ 
+@@ -14437,7 +14466,7 @@
+ 	mob_stop_attack(md);
+ 	mob_stop_walking(md, 0);
+ 	md->target_id = md->attacked_id = 0;
+-	clif_charnameack(0, &md->bl);
++	clif_charnameack(NULL, &md->bl);
+ 
+ 	return 0;
+ }
+@@ -15045,7 +15074,601 @@
+ 	return 0;
+ }
+ 
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * factioninfo(<Faction ID>,<Type>[,<Val>]);
++ **/
++BUILDIN_FUNC(factioninfo) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id, type, val = 0;
+ 
++	faction_id = script_getnum(st,2);
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("factioninfo: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	type = script_getnum(st,3);
++
++	if( script_hasdata(st,4) )
++		val = script_getnum(st,4);
++
++	if( val < 0 || (type == 11 && val > MAX_FACTION_ALLIANCE) || (type == 12 && val > MAX_AURA_EFF))
++	{
++		ShowWarning("factioninfo: Invalid val: %d \n",val);
++		return 0;
++	}
++
++	switch(type)
++	{
++		default: script_pushstrcopy(st,fdb->name);		break;	// Faction's name
++		case 1: script_pushstrcopy(st,fdb->pl_name);	break;	// Player's name
++		case 2: script_pushstrcopy(st,fdb->map);		break;	// Location
++		case 3: script_pushint(st,fdb->x);				break;	// Location X
++		case 4: script_pushint(st,fdb->y);				break;	// Location Y
++		case 5: script_pushint(st,fdb->race);			break;	// Race
++		case 6: script_pushint(st,fdb->ele);			break;	// Element
++		case 7: script_pushint(st,fdb->ele_lvl);		break;	// Element lvl
++		case 8: script_pushint(st,fdb->size);			break;	// Size
++		case 9: script_pushint(st,fdb->ccolor);			break;	// Clothes Color
++		case 10: script_pushint(st,fdb->voting_active);	break;	// Voting State
++		case 11: script_pushint(st,fdb->alliance[val]);	break;	// Alliance ID
++		case 12: script_pushint(st,fdb->aura[val]);		break;	// Aura ID
++	}
++
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * votinginfo(<Faction ID>);
++ **/
++BUILDIN_FUNC(votinginfo) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id;
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("votinginfo: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	faction_voting_info(faction_id);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * setfaction(<Faction ID>[,<Char ID>]);
++ **/
++BUILDIN_FUNC(setfaction) 
++{
++	TBL_PC* sd = NULL;
++	struct faction_data* fdb = NULL;
++	int faction_id, char_id;
++
++	if( script_hasdata(st,3) )
++	{
++		char_id = script_getnum(st,3);
++		if( ( sd = map_charid2sd(char_id) ) == NULL )
++		{
++			ShowError("setfaction: No such character (char_id=%d).\n", char_id);
++			script_pushnil(st);
++			return 1;
++		}
++	} else {
++		if( ( sd = script_rid2sd(st) ) == NULL )
++		{
++			script_pushnil(st);
++			return 0;
++		}
++	}
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("setfaction: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	sd->status.faction_id = faction_id;
++	status_calc_pc(sd,0);
++	if( map[sd->bl.m].flag.fvf )
++		pc_setpos(sd, sd->mapindex, sd->bl.x, sd->bl.y, CLR_RESPAWN);
++
++	return 0;
++}
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * setfactionleader(<Faction ID>,<Char ID>);
++ **/
++BUILDIN_FUNC(setfactionleader) 
++{
++	TBL_PC* sd;
++	char out[100];
++	struct faction_data* fdb = NULL;
++	int faction_id, char_id;
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("setfactionleader: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	char_id = script_getnum(st,3);
++	if( ( sd = map_charid2sd(char_id) ) == NULL )
++	{
++		ShowError("setfactionleader: No such character (char_id=%d).\n", char_id);
++		script_pushnil(st);
++		return 1;
++	}
++
++	if( sd->status.faction_id != faction_id )
++	{
++		ShowError("setfactionleader: Character %d not in faction %d).\n", char_id, faction_id);
++		return 1;
++	}
++
++	fdb->leader_id = char_id;
++	sprintf(out, "$faction_leader_id_%d",faction_id);
++	mapreg_setreg(add_str(out), char_id);
++	faction_factionaura(sd);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * relicadd(<Faction ID>,<Item ID>,<Slot>);
++ **/
++BUILDIN_FUNC(relicadd) 
++{
++	struct item_data *item_data = NULL;
++	struct faction_data* fdb = NULL;
++	int faction_id, item, slot;
++	char out[100];
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("relicadd: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	item = script_getnum(st,3);
++	if( (item_data = itemdb_exists(item)) == NULL )
++	{
++		ShowWarning("relicadd: Invalid item id %d \n",item);
++		return 0;
++	}
++
++	slot = script_getnum(st,4);
++	if( slot < 0 || slot >= MAX_RELIC )
++	{
++		ShowWarning("relicadd: Invalid relic slot %d \n",slot);
++		return 0;
++	}
++
++	fdb->relic[slot].item_id = item_data->nameid;
++	sprintf(out, "$faction_relics_%d",faction_id);
++	mapreg_setreg(reference_uid(add_str(out), slot), item_data->nameid);
++	map_foreachpc(faction_relic_change_sub, faction_id);
++	script_pushint(st,1);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * relicgetinfo(<Faction ID>,<Slot>);
++ **/
++BUILDIN_FUNC(relicgetinfo) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id, slot;
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("relicgetinfo: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	slot = script_getnum(st,3);
++	if( slot < 0 || slot >= MAX_RELIC )
++	{
++		ShowWarning("relicgetinfo: Invalid relic slot %d \n",slot);
++		return 0;
++	}
++
++	script_pushint(st,fdb->relic[slot].item_id);
++
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * relicactivate(<Faction ID>,<Slot>,<Val>);
++ **/
++BUILDIN_FUNC(relicactivate) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id, slot;
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("relicactivate: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	slot = script_getnum(st,3);
++	if( slot < 0 || slot >= MAX_RELIC )
++	{
++		ShowWarning("relicactivate: Invalid relic slot %d \n",slot);
++		return 0;
++	}
++
++	fdb->relic[slot].active = script_getnum(st,4);
++	map_foreachpc(faction_relic_change_sub, faction_id);
++	script_pushint(st,1);
++
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * relicdel(<Faction ID>,<Slot>);
++ **/
++BUILDIN_FUNC(relicdel) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id, slot;
++
++	faction_id = script_getnum(st,2);
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("relicdel: Invalid faction id %d \n",faction_id);
++		return 0;
++	}
++
++	slot = script_getnum(st,3);
++	if( slot < 0 || slot >= MAX_RELIC )
++	{
++		ShowWarning("relicdel: Invalid relic slot %d \n",slot);
++		return 0;
++	}
++
++	fdb->relic[slot].item_id = 0;
++	map_foreachpc(faction_relic_change_sub, faction_id);
++	script_pushint(st,1);
++
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * vote(<Char ID>[,<Amount of Votes>]);
++ **/
++BUILDIN_FUNC(vote) 
++{
++	TBL_PC *sd = NULL, *tsd = NULL;
++	struct faction_data* fdb = NULL;
++	int char_id, votes;
++
++	if( (sd = script_rid2sd(st)) == NULL )
++	{
++		script_pushnil(st);
++		return 0;
++	}
++
++	if( (fdb = faction_search(sd->status.faction_id)) == NULL )
++	{
++		ShowWarning("vote: Invalid faction id %d\n",sd->status.faction_id);
++		return 0;
++	}
++
++	char_id = script_getnum(st,2);
++	if( (tsd = map_charid2sd(char_id)) == NULL )
++	{
++		ShowError("vote: No such character (char_id=%d).\n", char_id);
++		script_pushnil(st);
++		return 1;
++	}
++
++	if( sd->status.faction_id != tsd->status.faction_id )
++	{
++		ShowError("vote: Different factions (sd=%d, tsd=%d).\n", sd->status.faction_id, tsd->status.faction_id);
++		return 1;
++	}
++
++	if( script_hasdata(st,3) )
++		votes = script_getnum(st,3);
++	else
++		votes = 1;
++
++	faction_voting_add(sd, tsd, votes);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * addvotes(<Char ID>[,<Amount of Votes>]);
++ **/
++BUILDIN_FUNC(addvotes) 
++{
++	TBL_PC *tsd = NULL;
++	struct faction_data* fdb = NULL;
++	int char_id, votes;
++
++	char_id = script_getnum(st,2);
++	if( (tsd = map_charid2sd(char_id)) == NULL )
++	{
++		ShowError("addvotes: No such character (char_id=%d).\n", char_id);
++		script_pushnil(st);
++		return 1;
++	}
++
++	if( (fdb = faction_search(tsd->status.faction_id)) == NULL )
++	{
++		ShowWarning("addvotes: Invalid faction id %d\n",tsd->status.faction_id);
++		return 0;
++	}
++
++	if( script_hasdata(st,3) )
++		votes = script_getnum(st,3);
++	else
++		votes = 1;
++
++	faction_voting_add(NULL, tsd, votes);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * votingstart([<Faction ID>]);
++ **/
++BUILDIN_FUNC(votingstart) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id = 0, i;
++
++	if( script_hasdata(st,2) )
++	{
++		faction_id = script_getnum(st,2);
++		if( (fdb = faction_search(faction_id)) == NULL )
++		{
++			ShowWarning("votingstart: Invalid faction id %d\n",faction_id);
++			return 0;
++		}
++		faction_voting_start(faction_id);
++	} else {
++
++		for( i = 0; i < MAX_FACTION; i++ )
++			if( (fdb = faction_search(i)) != NULL )
++				faction_voting_start(i);
++	}
++	npc_event_doall("OnVotingStart");
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * votingstop([<Faction ID>]);
++ **/
++BUILDIN_FUNC(votingstop) 
++{
++	struct faction_data* fdb = NULL;
++	int faction_id = 0, i;
++
++	if( script_hasdata(st,2) )
++	{
++		faction_id = script_getnum(st,2);
++		if( (fdb = faction_search(faction_id)) == NULL )
++		{
++			ShowWarning("votingstop: Invalid faction id %d\n",faction_id);
++			return 0;
++		}
++		faction_voting_finish(faction_id);
++	} else {
++	
++		for( i = 0; i < MAX_FACTION; i++ )
++			if( (fdb = faction_search(i)) != NULL )
++				faction_voting_finish(i);
++	}
++
++	npc_event_doall("OnVotingEnd");
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * factionmonster(<faction ID>,"<map name>",<x>,<y>,"<name to show>",<mob ID>,<amount>[,"<event label>"]);
++ **/
++BUILDIN_FUNC(factionmonster)
++{
++	int faction_id    = script_getnum(st,2);
++	const char* mapn  = script_getstr(st,3);
++	int x             = script_getnum(st,4);
++	int y             = script_getnum(st,5);
++	const char* str   = script_getstr(st,6);
++	int class_        = script_getnum(st,7);
++	int amount        = script_getnum(st,8);
++	const char* event = "";
++	struct map_session_data* sd = NULL;
++	struct faction_data* fdb = NULL;
++	struct mob_data *md = NULL;
++	int m, i;
++
++	if( script_hasdata(st,9) )
++	{
++		event = script_getstr(st,9);
++		check_event(st, event);
++	}
++
++	if( class_ >= 0 && !mobdb_checkid(class_) )
++	{
++		ShowWarning("factionmonster: Attempted to spawn non-existing monster class %d\n", class_);
++		return 1;
++	}
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("factionmonster: Invalid faction id %d\n",faction_id);
++		return 0;
++	}
++
++	sd = map_id2sd(st->rid);
++
++	if( sd && strcmp(mapn,"this") == 0 )
++		m = sd->bl.m;
++	else
++	{
++		m = map_mapname2mapid(mapn);
++		if( map[m].flag.src4instance && st->instance_id )
++		{
++			if( (m = instance_mapid2imapid(m, st->instance_id)) < 0 )
++			{
++				ShowError("factionmonster: Trying to spawn monster (%d) on instance map (%s) without instance attached.\n", class_, mapn);
++				return 1;
++			}
++		}
++	}
++
++	for( i = 0; i < amount; i++ )
++	{
++		if( (md = mob_once_spawn_sub(&sd->bl, m, x, y, str, class_, event)) )
++		{
++			md->faction_id = faction_id;
++			mob_spawn(md);
++		}
++	}
++	script_pushint(st, md->bl.id);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * Same as factionmonster but randomize location in x0,x1,y0,y1 area
++ **/
++BUILDIN_FUNC(areafactionmonster)
++{
++	int faction_id    	= script_getnum(st,2);
++	const char *mapn	= script_getstr(st,3);
++	int x0				= script_getnum(st,4);
++	int y0				= script_getnum(st,5);
++	int x1				= script_getnum(st,6);
++	int y1				= script_getnum(st,7);
++	const char *str		= script_getstr(st,8);
++	int class_			= script_getnum(st,9);
++	int amount			= script_getnum(st,10);
++	const char *event	= "";
++	struct faction_data* fdb = NULL;
++
++	struct map_session_data* sd;
++	int16 m;
++
++	if (script_hasdata(st,11))
++	{
++		event = script_getstr(st, 11);
++		check_event(st, event);
++	}
++
++	if( (fdb = faction_search(faction_id)) == NULL )
++	{
++		ShowWarning("areafactionmonster: Invalid faction id %d\n",faction_id);
++		return 0;
++	}
++
++	sd = map_id2sd(st->rid);
++
++	if (sd && strcmp(mapn, "this") == 0)
++		m = sd->bl.m;
++	else
++	{
++		m = map_mapname2mapid(mapn);
++		if (map[m].flag.src4instance && st->instance_id)
++		{ // Try to redirect to the instance map, not the src map
++			if ((m = instance_mapid2imapid(m, st->instance_id)) < 0)
++			{
++				ShowError("areafactionmonster: Trying to spawn monster (%d) on instance map (%s) without instance attached.\n", class_, mapn);
++				return 1;
++			}
++		}
++	}
++
++	mob_once_spawn_area(sd, m, x0, y0, x1, y1, str, class_, amount, event, faction_id);
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * fvfon("Map"[,Faction ID[,Relic ID]]);
++ **/
++BUILDIN_FUNC(fvfon)
++{
++	int16 m;
++	const char *str;
++	int faction_id = 0, relic_id = 0;
++
++	str=script_getstr(st,2);
++	if( script_hasdata(st,3) )
++		faction_id = script_getnum(st, 3);
++	if( script_hasdata(st,4) )
++		relic_id = script_getnum(st, 4);
++
++	if( (m = map_mapname2mapid(str)) >= 0 && !map[m].flag.fvf )
++	{
++		map[m].flag.fvf = 1;
++		map[m].faction.id = faction_id;
++		map[m].faction.relic = relic_id;
++		clif_map_property_mapall(m, MAPPROPERTY_FREEPVPZONE);
++		map_foreachinmap(faction_reload_fvf_sub, m, BL_ALL);
++	}
++	return 0;
++}
++
++/**
++ * Complete Faction System [Lilith]
++ * Ported from rAthena [15peaces]
++ * fvfoff("Map");
++ **/
++BUILDIN_FUNC(fvfoff)
++{
++	int16 m;
++	const char *str;
++
++	str=script_getstr(st,2);
++	if( (m = map_mapname2mapid(str)) >= 0 && map[m].flag.fvf )
++	{
++		map[m].flag.fvf = 0;
++		map[m].faction.id = 0;
++		map[m].faction.relic = 0;
++		clif_map_property_mapall(m, MAPPROPERTY_NOTHING);
++		map_foreachinmap(faction_reload_fvf_sub, m, BL_ALL);
++	}
++	return 0;
++}
++
+ // declarations that were supposed to be exported from npc_chat.c
+ #ifdef PCRE_SUPPORT
+ BUILDIN_FUNC(defpattern);
+@@ -15233,8 +15856,8 @@
+ 	BUILDIN_DEF(detachrid,""),
+ 	BUILDIN_DEF(isloggedin,"i?"),
+ 	BUILDIN_DEF(setmapflagnosave,"ssii"),
+-	BUILDIN_DEF(getmapflag,"si"),
+-	BUILDIN_DEF(setmapflag,"si?"),
++	BUILDIN_DEF(getmapflag,"si?"),
++	BUILDIN_DEF(setmapflag,"si??"),
+ 	BUILDIN_DEF(removemapflag,"si"),
+ 	BUILDIN_DEF(pvpon,"s"),
+ 	BUILDIN_DEF(pvpoff,"s"),
+@@ -15458,5 +16081,26 @@
+ 	BUILDIN_DEF(checkquest, "i?"),
+ 	BUILDIN_DEF(changequest, "ii"),
+ 	BUILDIN_DEF(showevent, "ii"),
++ 	/**
++	 * Complete Faction System [Lilith]
++	 * Ported from rAthena [15peaces]
++	 **/
++	BUILDIN_DEF(factioninfo, "ii?"),
++	BUILDIN_DEF(setfaction, "i?"),
++	BUILDIN_DEF(setfactionleader, "ii"),
++	BUILDIN_DEF(relicadd, "iii"),
++	BUILDIN_DEF(relicgetinfo, "ii"),
++	BUILDIN_DEF(relicdel, "ii"),
++	BUILDIN_DEF(relicactivate, "iii"),
++	BUILDIN_DEF(votingstart, "?"),
++	BUILDIN_DEF(votingstop, "?"),
++	BUILDIN_DEF(vote, "i?"),
++	BUILDIN_DEF(addvotes, "i?"),
++	BUILDIN_DEF2(votingstop,"votingend","?"),
++	BUILDIN_DEF(votinginfo, "i"),
++	BUILDIN_DEF(factionmonster,"isiisii?"),
++	BUILDIN_DEF(areafactionmonster,"isiiiisii?"),
++	BUILDIN_DEF(fvfon,"s?"),
++	BUILDIN_DEF(fvfoff,"s"),
+ 	{NULL,NULL,NULL},
+ };
+
+Property changes on: src/map/script.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/script.h
+===================================================================
+--- src/map/script.h	(revision 747)
++++ src/map/script.h	(working copy)
+@@ -4,6 +4,9 @@
+ #ifndef _SCRIPT_H_
+ #define _SCRIPT_H_
+ 
++/// Composes the uid of a reference from the id and the index
++#define reference_uid(id,idx) ( (int32)((((uint32)(id)) & 0x00ffffff) | (((uint32)(idx)) << 24)) )
++
+ struct map_session_data;
+ 
+ extern int potion_flag; //For use on Alchemist improved potions/Potion Pitcher. [Skotlex]
+
+Property changes on: src/map/script.h
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/skill.c
+===================================================================
+--- src/map/skill.c	(revision 747)
++++ src/map/skill.c	(working copy)
+@@ -33,6 +33,7 @@
+ #include "guild.h"
+ #include "date.h"
+ #include "unit.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -851,7 +852,7 @@
+ 	case CR_GRANDCROSS:
+ 	case NPC_GRANDDARKNESS:
+ 		//Chance to cause blind status vs demon and undead element, but not against players
+-		if(!dstsd && (battle_check_undead(tstatus->race,tstatus->def_ele) || tstatus->race == RC_DEMON))
++		if(!dstsd && (!faction_check_skill_use(src,bl) && (battle_check_undead(tstatus->race,tstatus->def_ele) || tstatus->race == RC_DEMON)))
+ 			sc_start(bl,SC_BLIND,100,skilllv,skill_get_time2(skillid,skilllv));
+ 		attack_type |= BF_WEAPON;
+ 		break;
+@@ -1179,7 +1180,7 @@
+ 			sc_start(bl,SC_STOP,100,skilllv,skill_get_time(skillid,skilllv));
+ 		break;
+ 	case LG_RAYOFGENESIS:	// 50% chance to cause Blind on Undead and Demon monsters.
+-		if ( battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race == RC_DEMON )
++		if ( !faction_check_skill_use(src,bl) && ( battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race == RC_DEMON ))
+ 			sc_start(bl, SC_BLIND,50, skilllv, skill_get_time(skillid,skilllv));
+ 		break;
+ 	case LG_EARTHDRIVE:
+@@ -3821,8 +3822,7 @@
+ 
+ 	case PR_TURNUNDEAD:
+ 	case ALL_RESURRECTION:
+-		if (!battle_check_undead(tstatus->race, tstatus->def_ele))
+-			break;
++		if(battle_check_undead(tstatus->race, tstatus->def_ele) && !faction_check_skill_use(src,bl))
+ 		skill_attack(BF_MAGIC,src,src,bl,skillid,skilllv,tick,flag);
+ 		break;
+ 
+@@ -3920,7 +3920,7 @@
+ 
+ 	case PR_BENEDICTIO:
+ 		//Should attack undead and demons. [Skotlex]
+-		if (battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race == RC_DEMON)
++		if (!faction_check_skill_use(src,bl) && (battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race == RC_DEMON))
+ 			skill_attack(BF_MAGIC, src, src, bl, skillid, skilllv, tick, flag);
+ 	break;
+ 
+@@ -4662,7 +4662,7 @@
+ 		case AB_RENOVATIO:
+ 		case AB_HIGHNESSHEAL:
+ 			//Apparently only player casted skills can be offensive like this.
+-			if (sd && battle_check_undead(tstatus->race,tstatus->def_ele)) {
++			if (sd && battle_check_undead(tstatus->race,tstatus->def_ele) && !faction_check_skill_use(src,bl)) {
+ 				if (battle_check_target(src, bl, BCT_ENEMY) < 1) {
+ 				  	//Offensive heal does not works on non-enemies. [Skotlex]
+ 					clif_skill_fail(sd,skillid,0,0,0);
+@@ -5328,7 +5328,7 @@
+ 	case SM_PROVOKE:
+ 	case SM_SELFPROVOKE:
+ 	case MER_PROVOKE:
+-		if( (tstatus->mode&MD_BOSS) || battle_check_undead(tstatus->race,tstatus->def_ele) )
++		if( (tstatus->mode&MD_BOSS) || (battle_check_undead(tstatus->race,tstatus->def_ele) && !faction_check_skill_use(src,bl)) )
+ 		{
+ 			map_freeblock_unlock();
+ 			return 1;
+@@ -5901,7 +5901,7 @@
+ 			status_change_end(bl, SC_STUN, INVALID_TIMER);
+ 		}
+ 		//Is this equation really right? It looks so... special.
+-		if(battle_check_undead(tstatus->race,tstatus->def_ele))
++		if(battle_check_undead(tstatus->race,tstatus->def_ele) && !faction_check_skill_use(src,bl))
+ 		{
+ 			status_change_start(bl, SC_BLIND,
+ 				100*(100-(tstatus->int_/2+tstatus->vit/3+tstatus->luk/10)),
+@@ -9159,7 +9159,7 @@
+ 		if( ud->skillid == PR_TURNUNDEAD )
+ 		{
+ 			struct status_data *tstatus = status_get_status_data(target);
+-			if( !battle_check_undead(tstatus->race, tstatus->def_ele) )
++			if( !battle_check_undead(tstatus->race, tstatus->def_ele) || faction_check_skill_use(src,target) )
+ 				break;
+ 		}
+ 
+@@ -10777,6 +10777,10 @@
+ 		limit = skill_get_time(skillid,skilllv);
+ 		break;
+ 
++	case FACTION_AURA: // Complete Faction System [Lilith]
++ 		limit = 1000000;//it doesn't matter
++ 		break;
++
+ 	case LG_BANDING:
+ 		limit = -1;
+ 		break;
+@@ -10856,6 +10860,7 @@
+ 	group->state.magic_power = (flag&2 || (sc && sc->data[SC_MAGICPOWER])); //Store the magic power flag. [Skotlex]
+ 	group->state.ammo_consume = (sd && sd->state.arrow_atk && skillid != GS_GROUNDDRIFT); //Store if this skill needs to consume ammo.
+ 	group->state.song_dance = (unit_flag&(UF_DANCE|UF_SONG)?1:0)|(unit_flag&UF_ENSEMBLE?2:0); //Signals if this is a song/dance/duet
++	group->state.faction_aura = ( skillid == FACTION_AURA )?1:0; // Complete Faction System [Lilith]
+ 
+   	//if tick is greater than current, do not invoke onplace function just yet. [Skotlex]
+ 	if (DIFF_TICK(group->tick, gettick()) > SKILLUNITTIMER_INTERVAL)
+@@ -11186,6 +11191,11 @@
+ 			skill_attack(skill_get_type(sg->skill_id), ss, &src->bl, bl, sg->skill_id, sg->skill_lv, tick, 0);
+ 		break;
+ 
++		case UNT_FACTION_AURA: // Complete Faction System [Lilith]
++ 			if ( !sce )
++				sc_start4(bl,type,100,sg->skill_lv,(sg->unit_id == UNT_FACTION_AURA)?sg->faction_id:0,0,0,1000);
++ 			break;
++
+ 	}
+ 	return skillid;
+ }
+@@ -11286,7 +11296,7 @@
+ 		break;
+ 
+ 		case UNT_SANCTUARY:
+-			if( battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race==RC_DEMON )
++			if( (battle_check_undead(tstatus->race, tstatus->def_ele) || tstatus->race==RC_DEMON) && !faction_check_skill_use(&src->bl,bl) )
+ 			{ //Only damage enemies with offensive Sanctuary. [Skotlex]
+ 				if( battle_check_target(&src->bl,bl,BCT_ENEMY) > 0 && skill_attack(BF_MAGIC, ss, &src->bl, bl, sg->skill_id, sg->skill_lv, tick, 0) )
+ 					sg->val1 -= 2; // reduce healing count if this was meant for damaging [hekate]
+@@ -11312,7 +11322,7 @@
+ 
+ 		case UNT_EVILLAND:
+ 			//Will heal demon and undead element monsters, but not players.
+-			if ((bl->type == BL_PC) || (!battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race!=RC_DEMON))
++			if ((bl->type == BL_PC) || (!battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race!=RC_DEMON && !faction_check_skill_use(&src->bl,bl)))
+ 			{	//Damage enemies
+ 				if(battle_check_target(&src->bl,bl,BCT_ENEMY)>0)
+ 					skill_attack(BF_MISC, ss, &src->bl, bl, sg->skill_id, sg->skill_lv, tick, 0);
+@@ -11328,8 +11338,7 @@
+ 			break;
+ 
+ 		case UNT_MAGNUS:
+-			if (!battle_check_undead(tstatus->race,tstatus->def_ele) && tstatus->race!=RC_DEMON)
+-				break;
++			if((battle_check_undead(tstatus->race,tstatus->def_ele) || tstatus->race==RC_DEMON) && !faction_check_skill_use(&src->bl,bl))
+ 			skill_attack(BF_MAGIC,ss,&src->bl,bl,sg->skill_id,sg->skill_lv,tick,0);
+ 			break;
+ 
+@@ -11659,7 +11668,7 @@
+ 			break;
+ 
+ 		case UNT_EPICLESIS:
+-			if( bl->type == BL_PC && !battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race != RC_DEMON )
++			if( bl->type == BL_PC && ((!battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race != RC_DEMON) || faction_check_skill_use(&src->bl,bl)) )
+ 			{
+ 				int hp, sp;
+ 				switch( sg->skill_lv )
+@@ -11804,7 +11813,7 @@
+ 			break;
+ 
+ 		case UNT_WARMER:
+-			if( bl->type == BL_PC && !battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race != RC_DEMON )
++			if( bl->type == BL_PC && ((!battle_check_undead(tstatus->race, tstatus->def_ele) && tstatus->race != RC_DEMON ) || faction_check_skill_use(&src->bl,bl)) )
+ 			{
+ 				int hp = 0;
+ 				if( ssc && ssc->data[SC_HEATER_OPTION] )
+@@ -12062,6 +12071,10 @@
+ 				}
+ 			}
+ 			break;
++		case FACTION_AURA: // Complete Faction System [Lilith]
++ 			if( !(sce && sce->val4) )
++ 				status_change_end(bl, type, INVALID_TIMER);
++ 			break;
+ 	}
+ 
+ 	return skill_id;
+@@ -14983,6 +14996,7 @@
+ 	group->tick       = gettick();
+ 	group->valstr     = NULL;
+ 
++	group->faction_id = faction_get_id(src); // Complete Faction System [Lilith]
+ 	ud->skillunit[i] = group;
+ 
+ 	if (skillid == PR_SANCTUARY) //Sanctuary starts healing +1500ms after casted. [Skotlex]
+@@ -15203,7 +15217,7 @@
+ 	nullpo_ret(group);
+ 
+ 	// check for expiration
+-	if( (DIFF_TICK(tick,group->tick) >= group->limit || DIFF_TICK(tick,group->tick) >= unit->limit) )
++	if( !group->state.faction_aura && (DIFF_TICK(tick,group->tick) >= group->limit || DIFF_TICK(tick,group->tick) >= unit->limit) )
+ 	{// skill unit expired (inlined from skill_unit_onlimit())
+ 		switch( group->unit_id )
+ 		{
+@@ -17589,6 +17603,7 @@
+ 	else if( strcmpi(split[6],"enemy")==0 ) skill_db[i].unit_target = BCT_ENEMY;
+ 	else if( strcmpi(split[6],"self")==0 ) skill_db[i].unit_target = BCT_SELF;
+ 	else if( strcmpi(split[6],"noone")==0 ) skill_db[i].unit_target = BCT_NOONE;
++	else if( strcmpi(split[6],"faction")==0 ) skill_db[i].unit_target = BCT_FACTION; // Complete Faction System [Lilith]
+ 	else skill_db[i].unit_target = strtol(split[6],NULL,16);
+ 
+ 	skill_db[i].unit_flag = strtol(split[7],NULL,16);
+
+Property changes on: src/map/skill.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/skill.h
+===================================================================
+--- src/map/skill.h	(revision 747)
++++ src/map/skill.h	(working copy)
+@@ -64,6 +64,7 @@
+ #define INF2_GUILD_ONLY 0x800
+ #define INF2_NO_ENEMY 0x1000
+ #define INF2_CHORUS_SKILL 0x2000
++#define INF2_FACTION_SKILL 0x8000 // Complete Faction System [Lilith]
+ 
+ //Walk intervals at which chase-skills are attempted to be triggered.
+ #define WALK_SKILL_INTERVAL 5
+@@ -155,7 +156,9 @@
+ 		unsigned ammo_consume : 1;
+ 		unsigned magic_power : 1;
+ 		unsigned song_dance : 2; //0x1 Song/Dance, 0x2 Ensemble
++		unsigned faction_aura : 1; // Complete Faction System [Lilith]
+ 	} state;
++	int faction_id; // Complete Faction System [Lilith]
+ };
+ 
+ struct skill_unit {
+@@ -1739,6 +1742,8 @@
+ 	EL_ROCK_CRUSHER,
+ 	EL_ROCK_CRUSHER_ATK,
+ 	EL_STONE_RAIN,
++
++	FACTION_AURA = 10020, // Complete Faction System [Lilith]
+ };
+ 
+ /// The client view ids for land skills.
+@@ -1880,6 +1885,8 @@
+ 	UNT_B_TRAP,
+ 	UNT_FIRE_RAIN,
+ 
++	UNT_FACTION_AURA = 0x189, // Complete Faction System [Lilith]
++
+ 	UNT_MAX
+ };
+ 
+Index: src/map/status.c
+===================================================================
+--- src/map/status.c	(revision 747)
++++ src/map/status.c	(working copy)
+@@ -30,6 +30,7 @@
+ #include "mercenary.h"
+ #include "elemental.h"
+ #include "vending.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <time.h>
+ #include <stdio.h>
+@@ -687,6 +688,8 @@
+ 	set_sc( GD_BATTLEORDER       , SC_BATTLEORDERS    , SI_BLANK           , SCB_STR|SCB_INT|SCB_DEX );
+ 	set_sc( GD_REGENERATION      , SC_REGENERATION    , SI_BLANK           , SCB_REGEN );
+ 
++	set_sc( FACTION_AURA	, SC_FACTION_AURA	, SI_BLANK	, SCB_ALL ); // Complete Faction System [Lilith]
++
+ 	// Storing the target job rather than simply SC_SPIRIT simplifies code later on.
+ 	SkillStatusChangeTable[SL_ALCHEMIST]   = (sc_type)MAPID_ALCHEMIST,
+ 	SkillStatusChangeTable[SL_MONK]        = (sc_type)MAPID_MONK,
+@@ -2413,6 +2416,14 @@
+ 	pc_delautobonus(sd,sd->autobonus2,ARRAYLENGTH(sd->autobonus2),true);
+ 	pc_delautobonus(sd,sd->autobonus3,ARRAYLENGTH(sd->autobonus3),true);
+ 
++	// Complete Faction System [Lilith]
++	if( sd->status.faction_id )
++	{
++		faction_calc(&sd->bl);
++		if (!calculating)
++			return 1;
++	}
++
+ 	// Parse equipment.
+ 	for( i = 0; i < EQI_MAX - 1; i++ )
+ 	{
+@@ -3855,6 +3866,9 @@
+ 	if( bl->type == BL_PET )
+ 		return; // pets are not affected by statuses
+ 
++	if( bl->type&BL_CHAR && !(bl->type&BL_PC) )
++		faction_calc(bl);
++
+ 	if( first && bl->type == BL_MOB )
+ 		return; // assume there will be no statuses active
+ 
+@@ -6770,6 +6784,10 @@
+ 			case SC_SHAPESHIFT:
+ 			case SC_PROPERTYWALK:
+ 				break;
++			case SC_FACTION_AURA: // Complete Faction System [Lilith]
++ 				if( sce->val4 && !val4 )//you cannot override master guild aura
++ 					return 0;
++ 				break;
+ 			default:
+ 				if(sce->val1 > val1)
+ 					return 1; //Return true to not mess up skill animations. [Skotlex]
+@@ -8532,7 +8550,23 @@
+ 		case SC_RAISINGDRAGON:
+ 			sce->val2 = status->max_hp / 100;// Officially tested its 1%hp drain. [Jobbie]
+ 			break;
++		// Complete Faction System [Lilith]
++		case SC_HIDING:
++		case SC_CLOAKING:
++		case SC_CHASEWALK:
++		case SC_CLOAKINGEXCEED:
++		case SC__INVISIBILITY:
++		case SC_CAMOUFLAGE:
++			if( faction_get_id(bl) )
++			{
++				clif_clearunit_area(bl,0);
++				map_foreachinrange(faction_aura_clear, bl, AREA_SIZE, BL_PC, bl);
++				if( sd && battle_config.faction_aura_bl&BL_PC &&
++					((battle_config.faction_aura_settings&1 && map[bl->m].flag.fvf) || battle_config.faction_aura_settings&2) )
++					clif_refresh(sd); 
+ 	}
++		break;
++	}
+ 
+ 	if( opt_flag&2 && sd && sd->touching_id )
+ 		npc_touchnext_areanpc(sd,false); // run OnTouch_ on next char in range
+@@ -9233,6 +9267,17 @@
+ 	if(opt_flag&2 && sd && map_getcell(bl->m,bl->x,bl->y,CELL_CHKNPC))
+ 		npc_touch_areanpc(sd,bl->m,bl->x,bl->y); //Trigger on-touch event.
+ 
++	// Complete Faction System [Lilith]
++	if( faction_get_id(bl) && (
++		type == SC_HIDING ||
++		type == SC_CLOAKING ||
++		type == SC_CHASEWALK ||
++		type == SC__INVISIBILITY ||
++		type == SC_CAMOUFLAGE ||
++		type == SC_CLOAKINGEXCEED) 
++	)
++		faction_show_aura(bl);
++
+ 	ers_free(sc_data_ers, sce);
+ 	return 1;
+ }
+@@ -10059,6 +10104,11 @@
+ 		}
+ 		break;
+ 
++	case SC_FACTION_AURA: // Complete Faction System [Lilith]
++ 		/* they only end by status_change_end */
++ 		sc_timer_next(600000 + tick, status_change_timer, bl->id, data);
++ 		return 0;
++
+ 	case SC_MEIKYOUSISUI:
+ 		if( --(sce->val4) >= 0 )
+ 		{
+@@ -10282,6 +10332,7 @@
+ 			case SC_HYOUHU_HUBUKI:
+ 			case SC_KAZEHU_SEIRAN:
+ 			case SC_DOHU_KOUKAI:
++			case SC_FACTION_AURA: // Complete Faction System [Lilith]
+ 				continue;
+ 
+ 			//Debuffs that can be removed.
+
+Property changes on: src/map/status.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/status.h
+===================================================================
+--- src/map/status.h	(revision 747)
++++ src/map/status.h	(working copy)
+@@ -678,6 +678,8 @@
+ 	//More Status
+ 	SC_SUMMER2,
+ 
++	SC_FACTION_AURA, // Complete Faction System [Lilith]
++
+ 	SC_MAX, //Automatically updated max, used in for's to check we are within bounds.
+ } sc_type;
+ 
+Index: src/map/trade.c
+===================================================================
+--- src/map/trade.c	(revision 747)
++++ src/map/trade.c	(working copy)
+@@ -61,6 +61,18 @@
+ 		return;
+ 	}
+ 
++	if( sd->status.faction_id && target_sd->status.faction_id )
++	{
++		if( battle_config.faction_trade_settings == 1 && !faction_check_alliance(&sd->bl,&target_sd->bl) )
++		{
++			clif_displaymessage(sd->fd, msg_txt(854));
++			return;
++		} else if( !battle_config.faction_trade_settings && sd->status.faction_id != target_sd->status.faction_id ) {
++			clif_displaymessage(sd->fd, msg_txt(853));
++			return;
++		}
++	}
++
+ 	level = pc_isGM(sd);
+ 	if ( !pc_can_give_items(level) || !pc_can_give_items(pc_isGM(target_sd)) ) //check if both GMs are allowed to trade
+ 	{
+
+Property changes on: src/map/trade.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: src/map/vending.c
+===================================================================
+--- src/map/vending.c	(revision 747)
++++ src/map/vending.c	(working copy)
+@@ -15,6 +15,7 @@
+ #include "skill.h"
+ #include "battle.h"
+ #include "log.h"
++#include "faction.h" // Complete Faction System [Lilith]
+ 
+ #include <stdio.h>
+ #include <string.h>
+@@ -54,6 +55,18 @@
+ 	if( !vsd->state.vending )
+ 		return; // not vending
+ 
++	if( sd->status.faction_id && vsd->status.faction_id )
++	{
++		if( battle_config.faction_trade_settings == 1 && !faction_check_alliance(&sd->bl,&vsd->bl) )
++		{
++			clif_displaymessage(sd->fd, msg_txt(854));
++			return;
++		} else if( !battle_config.faction_trade_settings && sd->status.faction_id != vsd->status.faction_id ) {
++			clif_displaymessage(sd->fd, msg_txt(853));
++			return;
++		}
++	}
++
+ 	if ( !pc_can_give_items(pc_isGM(sd)) || !pc_can_give_items(pc_isGM(vsd)) ) //check if both GMs are allowed to trade
+ 	{	// GM is not allowed to trade
+ 		clif_displaymessage(sd->fd, msg_txt(246));
+
+Property changes on: src/map/vending.c
+___________________________________________________________________
+Deleted: svn:eol-style
+## -1 +0,0 ##
+-native
+\ No newline at end of property
+Index: vcproj-10/map-server_sql.vcxproj
+===================================================================
+--- vcproj-10/map-server_sql.vcxproj	(revision 747)
++++ vcproj-10/map-server_sql.vcxproj	(working copy)
+@@ -154,6 +154,7 @@
+     <ClInclude Include="..\src\map\clif.h" />
+     <ClInclude Include="..\src\map\date.h" />
+ 	<ClInclude Include="..\src\map\elemental.h" />
++    <ClInclude Include="..\src\map\faction.h" />
+     <ClInclude Include="..\src\map\guild.h" />
+     <ClInclude Include="..\src\map\intif.h" />
+     <ClInclude Include="..\src\map\itemdb.h" />
+@@ -206,6 +207,7 @@
+     <ClCompile Include="..\src\map\clif.c" />
+     <ClCompile Include="..\src\map\date.c" />
+ 	<ClCompile Include="..\src\map\elemental.c" />
++    <ClCompile Include="..\src\map\faction.c" />
+     <ClCompile Include="..\src\map\guild.c" />
+     <ClCompile Include="..\src\map\intif.c" />
+     <ClCompile Include="..\src\map\itemdb.c" />
+
+Property changes on: vcproj-10/map-server_sql.vcxproj
+___________________________________________________________________
+Added: svn:eol-style
+## -0,0 +1 ##
++native
+\ No newline at end of property
+Index: vcproj-6/map-server_sql.dsp
+===================================================================
+--- vcproj-6/map-server_sql.dsp	(revision 747)
++++ vcproj-6/map-server_sql.dsp	(working copy)
+@@ -279,6 +279,14 @@
+ # End Source File
+ # Begin Source File
+ 
++SOURCE=..\src\map\faction.c
++# End Source File
++# Begin Source File
++
++SOURCE=..\src\map\faction.h
++# End Source File
++# Begin Source File
++
+ SOURCE=..\src\map\guild.c
+ # End Source File
+ # Begin Source File
+Index: vcproj-7.1/map-server_sql.vcproj
+===================================================================
+--- vcproj-7.1/map-server_sql.vcproj	(revision 747)
++++ vcproj-7.1/map-server_sql.vcproj	(working copy)
+@@ -203,8 +203,14 @@
+ 			<File
+ 				RelativePath="..\src\map\elemental.h"
+ 				>
++			</File
++			<File
++				RelativePath="..\src\map\faction.c">
+ 			</File>
+ 			<File
++				RelativePath="..\src\map\faction.h">
++			</File>
++			<File
+ 				RelativePath="..\src\map\guild.c">
+ 			</File>
+ 			<File
+Index: vcproj-9/map-server_sql.vcproj
+===================================================================
+--- vcproj-9/map-server_sql.vcproj	(revision 747)
++++ vcproj-9/map-server_sql.vcproj	(working copy)
+@@ -415,6 +415,14 @@
+ 				>
+ 			</File>
+ 			<File
++				RelativePath="..\src\map\faction.c"
++				>
++			</File>
++			<File
++				RelativePath="..\src\map\faction.h"
++				>
++			</File>
++			<File
+ 				RelativePath="..\src\map\guild.c"
+ 				>
+ 			</File>
