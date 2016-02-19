@@ -1,0 +1,643 @@
+ rewrite/conf/battle/feature.conf |   4 +
+ rewrite/conf/map_athena.conf     |   3 +-
+ rewrite/conf/msg_athena.conf     |   7 ++
+ rewrite/db/packet_db.txt         |  16 ++-
+ rewrite/src/common/mmo.h         |   1 +
+ rewrite/src/map/battle.c         |  10 +-
+ rewrite/src/map/battle.h         |   1 +
+ rewrite/src/map/clif.c           | 242 ++++++++++++++++++++++++++++++++++++++-
+ rewrite/src/map/clif.h           |  31 +++++
+ rewrite/src/map/map.h            |   1 +
+ rewrite/src/map/pc.c             |  63 ++++++++++
+ rewrite/src/map/pc.h             |  10 ++
+ 12 files changed, 383 insertions(+), 6 deletions(-)
+
+diff --git a/rewrite/conf/battle/feature.conf b/rewrite/conf/battle/feature.conf
+index ae1c00b..6e8ae8e 100644
+--- a/rewrite/conf/battle/feature.conf
++++ b/rewrite/conf/battle/feature.conf
+@@ -26,3 +26,7 @@ feature.buying_store: on
+ // Search stores (Note 1)
+ // Requires: 2010-08-03aRagexeRE or later
+ feature.search_stores: on
++
++// Banking (Note 1)
++// Requires: 2013-07-24aRagexe or later
++feature.banking: on
+diff --git a/rewrite/conf/map_athena.conf b/rewrite/conf/map_athena.conf
+index 644bafd..9daa593 100644
+--- a/rewrite/conf/map_athena.conf
++++ b/rewrite/conf/map_athena.conf
+@@ -108,11 +108,12 @@ minsave_time: 100
+ // 16: After successfully sending a mail with attachment
+ // 32: After successfully submitting an item for auction
+ // 64: After successfully get/delete/complete a quest
++// 128: After every bank transaction (deposit/withdraw)
+ // NOTE: These settings decrease the chance of dupes/lost items when there's a
+ // server crash at the expense of increasing the map/char server lag. If your 
+ // server rarely crashes, but experiences interserver lag, you may want to set
+ // these off.
+-save_settings: 127
++save_settings: 255
+ 
+ // Message of the day file, when a character logs on, this message is displayed.
+ motd_txt: conf/motd.txt
+diff --git a/rewrite/conf/msg_athena.conf b/rewrite/conf/msg_athena.conf
+index 2c3dd38..4c60c5c 100644
+--- a/rewrite/conf/msg_athena.conf
++++ b/rewrite/conf/msg_athena.conf
+@@ -604,5 +604,12 @@
+ 725: Your already have a cart.
+ 726: You can't have a cart with your current job.
+ 
++//Leaving space to avoid conflicts...
++// Roulette [15peaces]
++//800: Roulette is disabled
++//Banking [15peaces]
++801: You can't withdraw that much money
++802: Banking is disabled
++
+ //Custom translations
+ import: conf/import/msg_conf.txt
+diff --git a/rewrite/db/packet_db.txt b/rewrite/db/packet_db.txt
+index c68bb5d..3a0de1c 100644
+--- a/rewrite/db/packet_db.txt
++++ b/rewrite/db/packet_db.txt
+@@ -1767,8 +1767,20 @@ packet_ver: 29
+ 0x0977,14 //Monster HP Bar
+ 0x8d2,10 //Fast Movement
+ 
+-//2013-12-23cRagexe
++//2013-07-17 Ragexe
+ packet_ver: 30
++// Banking Packets [15peaces]
++0x09A6,12,ZC_BANKING_CHECK,2:10
++0x09A7,10,bankdeposit,2:6
++0x09A8,16,ZC_ACK_BANKING_DEPOSIT,2:4:12
++0x09A9,10,bankwithdrawal,2:6
++0x09AA,16,ZC_ACK_BANKING_WITHDRAW,2:4:12
++0x09AB,6,bankcheck,2
++0x09B6,6,bankopen,2
++0x09B7,4,ZC_ACK_OPEN_BANKING,2
++0x09B8,6,bankclose,2
++0x09B9,4,ZC_ACK_CLOSE_BANKING,2
++//2013-12-23cRagexe
+ 0x0369,7,actionrequest,2:6
+ 0x083c,10,useskilltoid,2:4:6
+ 0x0437,5,walktoxy,2
+@@ -1830,7 +1842,7 @@ packet_ver: 30
+ 
+ // Disconnect Prevent
+ 0x0447,2 //CZ_BLOCKING_PLAY_CANCEL
+-0x09ab,6 //CZ_REQ_BANKING_CHECK
++//0x09ab,6 //CZ_REQ_BANKING_CHECK
+ 0x09d4,2 //CZ_NPC_TRADE_QUIT
+ 
+ 0x0844,2,cashshopopen,2
+diff --git a/rewrite/src/common/mmo.h b/rewrite/src/common/mmo.h
+index 9bb871a..0d31eab 100644
+--- a/rewrite/src/common/mmo.h
++++ b/rewrite/src/common/mmo.h
+@@ -103,6 +103,7 @@
+ //Max amount of a single stacked item
+ #define MAX_AMOUNT 30000
+ #define MAX_ZENY 1000000000
++#define MAX_BANK_ZENY SINT32_MAX
+ #define MAX_FAME 1000000000
+ #define MAX_CART 100
+ #define MAX_SKILL 5057
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index 09f3f8c..e8878f8 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -6031,6 +6031,7 @@ static const struct _battle_data {
+ 	{ "gc_skill_edp_boost_formula_a",       &battle_config.gc_skill_edp_boost_formula_a,    0,      0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_b",       &battle_config.gc_skill_edp_boost_formula_b,    20,     0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_c",       &battle_config.gc_skill_edp_boost_formula_c,    1,      0,      1,              },
++	{ "feature.banking",                    &battle_config.feature_banking,                 1,      0,      1,              }, 
+ };
+ 
+ 
+@@ -6091,7 +6092,14 @@ void battle_adjust_conf()
+ 		battle_config.day_duration = 60000;
+ 	if (battle_config.night_duration && battle_config.night_duration < 60000) // added by [Yor]
+ 		battle_config.night_duration = 60000;
+-	
++
++#if PACKETVER < 20130724
++	if( battle_config.feature_banking ) {
++		ShowWarning("conf/battle/feature.conf banking is enabled but it requires PACKETVER 2013-07-24 or newer, disabling...\n");
++		battle_config.feature_banking = 0;
++	}
++#endif 
++
+ #ifndef CELL_NOSTACK
+ 	if (battle_config.cell_stack_limit != 1)
+ 		ShowWarning("Battle setting 'cell_stack_limit' takes no effect as this server was compiled without Cell Stack Limit support.\n");
+diff --git a/rewrite/src/map/battle.h b/rewrite/src/map/battle.h
+index cd3bc00..11a5f97 100644
+--- a/rewrite/src/map/battle.h
++++ b/rewrite/src/map/battle.h
+@@ -550,6 +550,7 @@ extern struct Battle_Config
+ 	int gc_skill_edp_boost_formula_b;
+ 	int gc_skill_edp_boost_formula_c;
+ 
++	int feature_banking;
+ } battle_config;
+ 
+ void do_init_battle(void);
+diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
+index 8b38028..e6f2502 100644
+--- a/rewrite/src/map/clif.c
++++ b/rewrite/src/map/clif.c
+@@ -56,6 +56,7 @@ struct Clif_Config {
+ } clif_config;
+ 
+ struct s_packet_db packet_db[MAX_PACKET_VER + 1][MAX_PACKET_DB + 1];
++int packet_db_ack[MAX_PACKET_VER + 1][MAX_ACK_FUNC + 1];
+ 
+ //Converts item type in case of pet eggs.
+ inline int itemtype(int type)
+@@ -7005,6 +7006,216 @@ int clif_cart_delitem(struct map_session_data *sd,int n,int amount)
+ 	return 0;
+ }
+ 
++// 09B7 <unknow data> (ZC_ACK_OPEN_BANKING) 
++void clif_bank_open(struct map_session_data *sd){
++	int fd;
++
++	nullpo_retv(sd);
++	fd = sd->fd;
++
++	WFIFOHEAD(fd,4);
++	WFIFOW(fd,0) = 0x09b7;
++	WFIFOW(fd,2) = 0;
++	WFIFOSET(fd,4);
++}
++
++/*
++ * Request to Open the banking system
++ * 09B6 <aid>L ??? (dunno just wild guess checkme)
++ */
++void clif_parse_BankOpen(int fd, struct map_session_data* sd) {
++	//TODO check if preventing trade or stuff like that
++	//also mark something in case char ain't available for saving, should we check now ?
++	nullpo_retv(sd);
++	if( !battle_config.feature_banking ) {
++		clif_displaymessage(fd,msg_txt(802)); //Banking is disabled
++		return;
++	}
++	else {
++		struct s_packet_db* info = &packet_db[sd->packet_ver][RFIFOW(fd,0)];
++		int aid = RFIFOL(fd,info->pos[0]); //unused should we check vs fd ?
++		if(sd->status.account_id == aid){
++			sd->state.banking = 1;
++			//request save ?
++			//chrif_bankdata_request(sd->status.account_id, sd->status.char_id);
++			//on succes open bank ?
++			clif_bank_open(sd);
++		}
++	}
++}
++
++// 09B9 <unknow data> (ZC_ACK_CLOSE_BANKING)
++
++void clif_bank_close(struct map_session_data *sd){
++	int fd;
++
++	nullpo_retv(sd);
++	fd = sd->fd;
++
++	WFIFOHEAD(fd,4);
++	WFIFOW(fd,0) = 0x09B9;
++	WFIFOW(fd,2) = 0;
++	WFIFOSET(fd,4);
++}
++
++/*
++ * Request to close the banking system
++ * 09B8 <aid>L ??? (dunno just wild guess checkme)
++ */
++void clif_parse_BankClose(int fd, struct map_session_data* sd) {
++	struct s_packet_db* info = &packet_db[sd->packet_ver][RFIFOW(fd,0)];
++	int aid = RFIFOL(fd,info->pos[0]); //unused should we check vs fd ?
++
++	nullpo_retv(sd);
++	if( !battle_config.feature_banking ) {
++		clif_displaymessage(fd,msg_txt(802)); //Banking is disabled
++		//still allow to go trough to not stuck player if we have disable it while they was in
++	}
++	if(sd->status.account_id == aid){
++		sd->state.banking = 0;
++		clif_bank_close(sd);
++	}
++}
++
++/*
++ * Display how much we got in bank (I suppose)
++  09A6 <Bank_Vault>Q <Reason>W (PACKET_ZC_BANKING_CHECK)
++ */
++void clif_Bank_Check(struct map_session_data* sd) {
++	unsigned char buf[13];
++	struct s_packet_db* info;
++	int16 len;
++	int cmd = 0;
++
++	nullpo_retv(sd);
++
++	cmd = packet_db_ack[sd->packet_ver][ZC_BANKING_CHECK];
++	if(!cmd) cmd = 0x09A6; //default
++	info = &packet_db[sd->packet_ver][cmd];
++	len = info->len;
++	if(!len) return; //version as packet disable
++	// sd->state.banking = 1; //mark opening and closing
++
++	WBUFW(buf,0) = cmd;
++	WBUFQ(buf,info->pos[0]) = sd->bank_vault; //value
++	WBUFW(buf,info->pos[1]) = 0; //reason
++	clif_send(buf,len,&sd->bl,SELF);
++}
++
++/*
++ * Requesting the data in bank
++ * 09AB <aid>L (PACKET_CZ_REQ_BANKING_CHECK)
++ */
++void clif_parse_BankCheck(int fd, struct map_session_data* sd) {
++	nullpo_retv(sd);
++
++	if( !battle_config.feature_banking ) {
++		clif_displaymessage(fd,msg_txt(802)); //Banking is disabled
++		return;
++	}
++	else {
++		struct s_packet_db* info = &packet_db[sd->packet_ver][RFIFOW(fd,0)];
++		int aid = RFIFOL(fd,info->pos[0]); //unused should we check vs fd ?
++		if(sd->status.account_id == aid) //since we have it let check it for extra security
++			clif_Bank_Check(sd);
++	}
++}
++
++/*
++ * Acknowledge of deposit some money in bank
++  09A8 <Reason>W <Money>Q <balance>L (PACKET_ZC_ACK_BANKING_DEPOSIT)
++ */
++void clif_bank_deposit(struct map_session_data *sd, enum e_BANKING_DEPOSIT_ACK reason) {
++	unsigned char buf[17];
++	struct s_packet_db* info;
++	int16 len;
++	int cmd =0;
++
++	nullpo_retv(sd);
++
++	cmd = packet_db_ack[sd->packet_ver][ZC_ACK_BANKING_DEPOSIT];
++	if(!cmd) cmd = 0x09A8;
++	info = &packet_db[sd->packet_ver][cmd];
++	len = info->len;
++	if(!len) return; //version as packet disable
++
++	WBUFW(buf,0) = cmd;
++	WBUFW(buf,info->pos[0]) = (short)reason;
++	WBUFQ(buf,info->pos[1]) = sd->bank_vault;/* money in the bank */
++	WBUFL(buf,info->pos[2]) = sd->status.zeny;/* how much zeny char has after operation */
++	clif_send(buf,len,&sd->bl,SELF);
++}
++
++/*
++ * Request saving some money in bank
++ * @author : original [Yommy/Hercules]
++ * 09A7 <AID>L <Money>L (PACKET_CZ_REQ_BANKING_DEPOSIT)
++ */
++void clif_parse_BankDeposit(int fd, struct map_session_data* sd) {
++	nullpo_retv(sd);
++	if( !battle_config.feature_banking ) {
++		clif_displaymessage(fd,msg_txt(802)); //Banking is disabled
++		return;
++	}
++	else {
++		struct s_packet_db* info = &packet_db[sd->packet_ver][RFIFOW(fd,0)];
++		int aid = RFIFOL(fd,info->pos[0]); //unused should we check vs fd ?
++		int money = RFIFOL(fd,info->pos[1]);
++
++		if(sd->status.account_id == aid){
++			enum e_BANKING_DEPOSIT_ACK reason = pc_bank_deposit(sd,max(0,money));
++			clif_bank_deposit(sd,reason);
++		}
++	}
++}
++
++/*
++ * Acknowledge of withdrawing some money from bank
++  09AA <Reason>W <Money>Q <balance>L (PACKET_ZC_ACK_BANKING_WITHDRAW)
++ */
++void clif_bank_withdraw(struct map_session_data *sd,enum e_BANKING_WITHDRAW_ACK reason) {
++	unsigned char buf[17];
++	struct s_packet_db* info;
++	int16 len;
++	int cmd;
++
++	nullpo_retv(sd);
++
++	cmd = packet_db_ack[sd->packet_ver][ZC_ACK_BANKING_WITHDRAW];
++	if(!cmd) cmd = 0x09AA;
++	info = &packet_db[sd->packet_ver][cmd];
++	len = info->len;
++	if(!len) return; //version as packet disable
++
++	WBUFW(buf,0) = cmd;
++	WBUFW(buf,info->pos[0]) = (short)reason;
++	WBUFQ(buf,info->pos[1]) = sd->bank_vault;/* money in the bank */
++	WBUFL(buf,info->pos[2]) = sd->status.zeny;/* how much zeny char has after operation */
++
++	clif_send(buf,len,&sd->bl,SELF);
++}
++
++/*
++ * Request Withdrawing some money from bank
++ * 09A9 <AID>L <Money>L (PACKET_CZ_REQ_BANKING_WITHDRAW)
++ */
++void clif_parse_BankWithdraw(int fd, struct map_session_data* sd) {
++        nullpo_retv(sd);
++	if( !battle_config.feature_banking ) {
++		clif_displaymessage(fd,msg_txt(802)); //Banking is disabled
++		return;
++	}
++	else {
++		struct s_packet_db* info = &packet_db[sd->packet_ver][RFIFOW(fd,0)];
++		int aid = RFIFOL(fd,info->pos[0]); //unused should we check vs fd ?
++		int money = RFIFOL(fd,info->pos[1]);
++		if(sd->status.account_id == aid){
++			enum e_BANKING_WITHDRAW_ACK reason = pc_bank_withdraw(sd,max(0,money));
++			clif_bank_withdraw(sd,reason);
++		}
++	}
++}
++
+ /// Opens the shop creation menu (ZC_OPENSTORE).
+ /// 012d <num>.W
+ /// num:
+@@ -17344,8 +17555,9 @@ static int packetdb_readdb(void)
+ 	//#0x0980
+ 	    0,  0,  0, 29, 28,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+ 	   31, -1, -1, -1, -1, -1, -1, -1,  8, 11,  9,  8,  0,  0,  0, 22,
+-	    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+-	    0,  0,  0,  0,  0,  0,  0, 14,  0,  0,  0,  0,  0,  0,  0,  0,
++	    0,  0,  0,  0,  0,  0, 12, 10, 14, 10, 14,  6,  0,  0,  0,  0,
++	    //0,  0,  0,  0,  0,  0,  0, 14,  0,  0,  0,  0,  0,  0,  0,  0,
++		0,  0,  0,  0,  0,  0,  6,  4,  6,  4,  0,  0,  0,  0,  0,  0,
+ 	//#0x09C0
+ 	    0, 10,  0,  0,  0,  0,  0,  0,  0,  0, 23,  0,  0,  0,102,  0,
+ 	    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1, -1, -1,  0,  7,
+@@ -17565,9 +17777,26 @@ static int packetdb_readdb(void)
+ 		{clif_parse_SearchStoreInfoListItemClick,"searchstoreinfolistitemclick"},
+ 		//{ clif_parse_MoveItem , "moveitem" },
+ 		{clif_parse_ranking,"ranking"},
++
++		// Banking System [15peaces]
++		{clif_parse_BankCheck,"bankcheck"},
++		{clif_parse_BankDeposit,"bankdeposit"},
++		{clif_parse_BankWithdraw,"bankwithdrawal"},
++		{clif_parse_BankOpen,"bankopen"},
++		{clif_parse_BankClose,"bankclose"},
+ 		{NULL,NULL}
+ 	};
+ 
++	struct {
++		char *name; //function name
++		int funcidx; //
++	} clif_ack_func[]={ //hash
++		{ "ZC_ACK_OPEN_BANKING", ZC_ACK_OPEN_BANKING},
++		{ "ZC_ACK_BANKING_DEPOSIT", ZC_ACK_BANKING_DEPOSIT},
++		{ "ZC_ACK_BANKING_WITHDRAW", ZC_ACK_BANKING_WITHDRAW},
++		{ "ZC_BANKING_CHECK", ZC_BANKING_CHECK},
++	}; 
++
+ 	// initialize packet_db[SERVER] from hardcoded packet_len_table[] values
+ 	memset(packet_db,0,sizeof(packet_db));
+ 	for( i = 0; i < ARRAYLENGTH(packet_len_table); ++i )
+@@ -17623,6 +17852,7 @@ static int packetdb_readdb(void)
+ 				// copy from previous version into new version and continue
+ 				// - indicating all following packets should be read into the newer version
+ 				memcpy(&packet_db[packet_ver], &packet_db[prev_ver], sizeof(packet_db[0]));
++				memcpy(&packet_db_ack[packet_ver], &packet_db_ack[prev_ver], sizeof(packet_db_ack[0])); 
+ 				continue;
+ 			} else if(strcmpi(w1,"packet_db_ver")==0) {
+ 				if(strcmpi(w2,"default")==0) //This is the preferred version.
+@@ -17668,6 +17898,14 @@ static int packetdb_readdb(void)
+ 		ARR_FIND( 0, ARRAYLENGTH(clif_parse_func), j, clif_parse_func[j].name != NULL && strcmp(str[2],clif_parse_func[j].name)==0 );
+ 		if( j < ARRAYLENGTH(clif_parse_func) )
+ 			packet_db[packet_ver][cmd].func = clif_parse_func[j].func;
++		 else { //search if it's a mapped ack func
++			ARR_FIND( 0, ARRAYLENGTH(clif_ack_func), j, clif_ack_func[j].name != NULL && strcmp(str[2],clif_ack_func[j].name)==0 );
++			if( j < ARRAYLENGTH(clif_ack_func)) {
++				int fidx = clif_ack_func[j].funcidx;
++				packet_db_ack[packet_ver][fidx] = cmd;
++				ShowInfo("Added %s, <=> %X i=%d for v=%d\n",clif_ack_func[j].name,cmd,fidx,packet_ver);
++			}
++		} 
+ 
+ 		// set the identifying cmd for the packet_db version
+ 		if (strcmp(str[2],"wanttoconnection")==0)
+diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
+index 20b9b3a..6db6128 100644
+--- a/rewrite/src/map/clif.h
++++ b/rewrite/src/map/clif.h
+@@ -32,16 +32,38 @@ struct party_booking_ad_info;
+ #define MAX_PACKET_VER		32
+ #define	MAX_PACKET_POS		20
+ 
++enum e_packet_ack {
++	ZC_ACK_OPEN_BANKING = 0,
++	ZC_ACK_BANKING_DEPOSIT,
++	ZC_ACK_BANKING_WITHDRAW,
++	ZC_BANKING_CHECK,
++	MAX_ACK_FUNC //auto upd len
++};
++
+ struct s_packet_db {
+ 	short len;
+ 	void (*func)(int, struct map_session_data *);
+ 	short pos[MAX_PACKET_POS];
+ };
+ 
++enum e_BANKING_DEPOSIT_ACK {
++	BDA_SUCCESS  = 0x0,
++	BDA_ERROR    = 0x1,
++	BDA_NO_MONEY = 0x2,
++	BDA_OVERFLOW = 0x3,
++};
++ 
++enum e_BANKING_WITHDRAW_ACK {
++	BWA_SUCCESS       = 0x0,
++	BWA_NO_MONEY      = 0x1,
++	BWA_UNKNOWN_ERROR = 0x2,
++};
++
+ // packet_db[SERVER] is reserved for server use
+ #define SERVER 0
+ #define packet_len(cmd) packet_db[SERVER][cmd].len
+ extern struct s_packet_db packet_db[MAX_PACKET_VER+1][MAX_PACKET_DB+1];
++extern int packet_db_ack[MAX_PACKET_VER + 1][MAX_ACK_FUNC + 1];
+ 
+ // local define
+ typedef enum send_target {
+@@ -799,4 +821,13 @@ int clif_dressing_room(struct map_session_data *sd, int view);
+ 
+ int clif_hom_spiritball(struct homun_data *hd);
+ 
++/* Bank System, thanks to Yommy/Hercules [15peaces] */
++void clif_bank_deposit (struct map_session_data *sd, enum e_BANKING_DEPOSIT_ACK reason);
++void clif_bank_withdraw (struct map_session_data *sd,enum e_BANKING_WITHDRAW_ACK reason);
++void clif_parse_BankDeposit (int fd, struct map_session_data *sd);
++void clif_parse_BankWithdraw (int fd, struct map_session_data *sd);
++void clif_parse_BankCheck (int fd, struct map_session_data *sd);
++void clif_parse_BankOpen (int fd, struct map_session_data *sd);
++void clif_parse_BankClose (int fd, struct map_session_data *sd);
++
+ #endif /* _CLIF_H_ */
+diff --git a/rewrite/src/map/map.h b/rewrite/src/map/map.h
+index 5a6241e..a401fa5 100644
+--- a/rewrite/src/map/map.h
++++ b/rewrite/src/map/map.h
+@@ -350,6 +350,7 @@ enum _sp {
+ 	SP_BASECLASS=120,	//Hmm.. why 100+19? I just use the next one... [Skotlex]
+ 	SP_KILLERRID=121,
+ 	SP_KILLEDRID=122,
++	SP_BANK_VAULT=123,
+ 
+ 	// Mercenaries
+ 	SP_MERCFLEE=165, SP_MERCKILLS=189, SP_MERCFAITH=190,
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index cd7a25a..3b8b8ce 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -1404,6 +1404,9 @@ int pc_reg_received(struct map_session_data *sd)
+ 		sd->mission_count = pc_readglobalreg(sd,"TK_MISSION_COUNT");
+ 	}
+ 
++	 if (battle_config.feature_banking)
++		sd->bank_vault = pc_readaccountreg(sd, BANK_VAULT_VAR);
++
+ 	//SG map and mob read [Komurka]
+ 	for(i=0;i<MAX_PC_FEELHATE;i++) //for now - someone need to make reading from txt/sql
+ 	{
+@@ -6922,6 +6925,7 @@ int pc_readparam(struct map_session_data* sd,int type)
+ 	case SP_FAME:        val = sd->status.fame; break;
+ 	case SP_KILLERRID:   val = sd->killerrid; break;
+ 	case SP_KILLEDRID:   val = sd->killedrid; break;
++	case SP_BANK_VAULT:	 val = sd->bank_vault; break;
+ 
+ 	// 3CeAM Custom Detections
+ 	// The pc_readparam function is normally just used
+@@ -7059,6 +7063,13 @@ int pc_setparam(struct map_session_data *sd,int type,int val)
+ 	case SP_KILLEDRID:
+ 		sd->killedrid = val;
+ 		return 1;
++	case SP_BANK_VAULT:
++		if (val < 0)
++			return false;
++		// TODO: Logging? [15peaces]
++		sd->bank_vault = cap_value(val, 0, MAX_BANK_ZENY);
++		pc_setaccountreg(sd, BANK_VAULT_VAR, sd->bank_vault);
++		return true;
+ 	default:
+ 		ShowError("pc_setparam: Attempted to set unknown parameter '%d'.\n", type);
+ 		return 0;
+@@ -9526,6 +9537,58 @@ int pc_read_motd(void)
+ 	return 0;
+ }
+ 
++/**
++* Deposit some money to bank
++* @param sd
++* @param money Amount of money to deposit
++**/
++enum e_BANKING_DEPOSIT_ACK pc_bank_deposit(struct map_session_data *sd, int money) {
++	unsigned int limit_check = money + sd->bank_vault;
++
++	if( money <= 0 || limit_check > MAX_BANK_ZENY ) {
++		return BDA_OVERFLOW;
++	} else if ( money > sd->status.zeny ) {
++		return BDA_NO_MONEY;
++	}
++
++	if( pc_payzeny(sd,money) )
++		return BDA_NO_MONEY;
++
++	sd->bank_vault += money;
++	pc_setaccountreg(sd, BANK_VAULT_VAR, sd->bank_vault);
++	
++	chrif_save(sd,0);
++	return BDA_SUCCESS;
++}
++
++/**
++* Withdraw money from bank
++* @param sd
++* @param money Amount of money that will be withdrawn
++**/
++enum e_BANKING_WITHDRAW_ACK pc_bank_withdraw(struct map_session_data *sd, int money) {
++	unsigned int limit_check = money + sd->status.zeny;
++	
++	if( money <= 0 ) {
++		return BWA_UNKNOWN_ERROR;
++	} else if ( money > sd->bank_vault ) {
++		return BWA_NO_MONEY;
++	} else if ( limit_check > MAX_ZENY ) {
++		/* no official response for this scenario exists. */
++		clif_displaymessage(sd->fd,msg_txt(801)); //You can't withdraw that much money
++		return BWA_UNKNOWN_ERROR;
++	}
++	
++	if( pc_getzeny(sd,money) )
++		return BWA_NO_MONEY;
++	
++	sd->bank_vault -= money;
++	pc_setaccountreg(sd, BANK_VAULT_VAR, sd->bank_vault);
++	
++	chrif_save(sd,0);
++	return BWA_SUCCESS;
++}
++
+ /*==========================================
+  * pc? åWèâä˙âª
+  *------------------------------------------*/
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index eecb133..29de578 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -22,6 +22,10 @@
+ #define MAX_PC_SKILL_REQUIRE 5
+ #define MAX_PC_FEELHATE 3
+ 
++#define BANK_VAULT_VAR "#BANKVAULT"
++// Disable value above & enable value below to use same variable as custom banker. [15peaces] 
++//#define BANK_VAULT_VAR "#bankstorage"
++
+ #define MAX_RUNE 20
+ #define MAX_RAGE 15
+ #define MAX_SPELLBOOK 7
+@@ -154,6 +158,7 @@ struct map_session_data {
+ 		unsigned magicmushroom_flag : 1;
+ 		unsigned no_gemstone : 1; // If a skill have a partner near, it don't consume gemstone but SP from all (ADORAMUS, COMET)
+ 		unsigned fearbreeze : 4; // Arrows used on SC_FEARBREEZE
++		unsigned int banking : 1; //1 when we using the banking system 0 when closed [15peaces]
+ 	} state;
+ 	struct {
+ 		unsigned char no_weapon_damage, no_magic_damage, no_misc_damage;
+@@ -451,6 +456,8 @@ struct map_session_data {
+ 	int debug_line;
+ 	const char* debug_func;
+ 	int shadowform_id;
++
++	int bank_vault; ///< Bank Vault
+ };
+ 
+ //Update this max as necessary. Raised from 80 to 84 as the Expanded Super Novice needs it. [Rytech]
+@@ -903,4 +910,7 @@ enum pc_msg {
+ 	MSG_UPGRADESKER_SECONDJOB	=  0x61f
+ };
+ 
++enum e_BANKING_DEPOSIT_ACK pc_bank_deposit(struct map_session_data *sd, int money);
++enum e_BANKING_WITHDRAW_ACK pc_bank_withdraw(struct map_session_data *sd, int money);
++
+ #endif /* _PC_H_ */
