@@ -1,13 +1,14 @@
  rewrite/db/cashshop_db.txt |  42 ++++++++
  rewrite/db/packet_db.txt   |  14 ++-
- rewrite/src/map/clif.c     | 234 +++++++++++++++++++++++++++++++++++++++++++++
- rewrite/src/map/clif.h     |  41 ++++++++
+ rewrite/src/map/clif.c     | 244 +++++++++++++++++++++++++++++++++++++++++++++
+ rewrite/src/map/clif.h     |  42 ++++++++
  rewrite/src/map/itemdb.c   |   1 +
- 5 files changed, 328 insertions(+), 4 deletions(-)
+ rewrite/src/map/map.c      |   1 +
+ 6 files changed, 340 insertions(+), 4 deletions(-)
 
 diff --git a/rewrite/db/cashshop_db.txt b/rewrite/db/cashshop_db.txt
 new file mode 100644
-index 0000000..ae63de1
+index 0000000..6f6d714
 --- /dev/null
 +++ b/rewrite/db/cashshop_db.txt
 @@ -0,0 +1,42 @@
@@ -34,7 +35,7 @@ index 0000000..ae63de1
 +//0,531,250
 +	
 +//#1 Popular
-+//1,513:100
++//1,513,100
 +
 +//#2 Limited
 +//2,533,250
@@ -80,7 +81,7 @@ index c68bb5d..926928f 100644
  //2015-05-13aRagexe
  packet_ver: 31
 diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
-index 8b38028..9a0391a 100644
+index 8b38028..ea1e151 100644
 --- a/rewrite/src/map/clif.c
 +++ b/rewrite/src/map/clif.c
 @@ -57,6 +57,9 @@ struct Clif_Config {
@@ -88,12 +89,12 @@ index 8b38028..9a0391a 100644
  struct s_packet_db packet_db[MAX_PACKET_VER + 1][MAX_PACKET_DB + 1];
  
 +// New Cashshop, thanks to hercules. [15peaces]
-+struct cs_data cs_s[CASHSHOP_TAB_MAX];
++struct cash_item_db cash_shop_items[CASHSHOP_TAB_MAX];
 +
  //Converts item type in case of pet eggs.
  inline int itemtype(int type)
  {
-@@ -15344,6 +15347,222 @@ void clif_parse_CashShopListSend(int fd, struct map_session_data *sd)
+@@ -15344,6 +15347,225 @@ void clif_parse_CashShopListSend(int fd, struct map_session_data *sd)
  	clif_cashshop_ack(sd, result);
  }
  
@@ -170,7 +171,7 @@ index 8b38028..9a0391a 100644
 +	if( itemdb_exists( nameid ) ){
 +		uint16 tab = atoi( str[0] );
 +		uint32 price = atoi( str[2] );
-+		struct hCSData* cid;
++		struct cash_item_data* cid;
 +		int j;
 +
 +		if( tab > CASHSHOP_TAB_MAX ){
@@ -181,18 +182,18 @@ index 8b38028..9a0391a 100644
 +			return 0;
 +		}
 +
-+		ARR_FIND( 0, cs_s[tab].item_count, j, nameid == cs_s[tab].data[j]->id );
++		ARR_FIND( 0, cash_shop_items[tab].count, j, nameid == cash_shop_items[tab].item[j]->id );
 +
-+		if( j == cs_s[tab].item_count ){
-+			RECREATE( cs_s[tab].data, struct hCSData *, ++cs_s[tab].item_count );
-+			CREATE( cs_s[tab].data[ cs_s[tab].item_count - 1], struct hCSData, 1 );
-+			cid = cs_s[tab].data[ cs_s[tab].item_count - 1];
-+		}else{
-+			cid = cs_s[tab].data[j];
-+		}
++		if( j == cash_shop_items[tab].count ){
++			RECREATE( cash_shop_items[tab].item, struct cash_item_data *, ++cash_shop_items[tab].count );
++			CREATE( cash_shop_items[tab].item[ cash_shop_items[tab].count - 1], struct cash_item_data, 1 );
++			cid = cash_shop_items[tab].item[ cash_shop_items[tab].count - 1];
++		}else
++			cid = cash_shop_items[tab].item[j];
 +
 +		cid->id = nameid;
 +		cid->price = price;
++
 +		return 1;
 +	}else{
 +		ShowWarning( "cashshop_parse_dbrow: Invalid ID %hu in line %d of \"%s\", skipping...\n", nameid, line, source );
@@ -206,29 +207,32 @@ index 8b38028..9a0391a 100644
 +	WFIFOW(fd, 0) = 0x845;
 +	WFIFOL(fd, 2) = sd->cashPoints;/* kafra for now disabled until we know how to apply it */
 +	WFIFOL(fd, 6) = sd->cashPoints;
-+	WFIFOSET(fd, 10);	
++	WFIFOSET(fd, 10);
 +}
 +
 + void clif_parse_CashShopClose(int fd, struct map_session_data *sd) {
 +}
 +
 +void clif_parse_CashShopSchedule(int fd, struct map_session_data *sd) {
-+	
-+	int i, j = 0;
++	int tab;
 +
-+	for( i = 0; i < CASHSHOP_TAB_MAX; i++ ) {
-+		WFIFOHEAD(fd, 8 + ( cs_s[i].item_count * 6 ) );
-+		WFIFOW(fd, 0) = 0x8ca;
-+		WFIFOW(fd, 2) = 8 + ( cs_s[i].item_count * 6 );
-+		WFIFOW(fd, 4) = cs_s[i].item_count;
-+		WFIFOW(fd, 6) = i;
++	for( tab = CASHSHOP_TAB_NEW; tab < CASHSHOP_TAB_MAX; tab++ ){
++		int length = 8 + cash_shop_items[tab].count * 6;
++		int i, offset;
 +
-+		for( j = 0; j < cs_s[i].item_count; j++ ) {
-+			WFIFOW(fd, 8 + ( 6 * j ) ) = cs_s[i].data[j]->id;
-+			WFIFOL(fd, 10 + ( 6 * j ) ) = cs_s[i].data[j]->price;
++		WFIFOHEAD( fd, length );
++		WFIFOW( fd, 0 ) = 0x8ca;
++		WFIFOW( fd, 2 ) = length;
++		WFIFOW( fd, 4 ) = cash_shop_items[tab].count;
++		WFIFOW( fd, 6 ) = tab;
++
++		for( i = 0, offset = 8; i < cash_shop_items[tab].count; i++, offset += 6 ){
++			struct item_data *id = itemdb_search(cash_shop_items[tab].item[i]->id);
++			WFIFOW( fd, offset ) = (id->view_id) ? id->view_id : cash_shop_items[tab].item[i]->id;
++			WFIFOL( fd, offset + 2 ) = cash_shop_items[tab].item[i]->price;
 +		}
 +
-+		WFIFOSET(fd, 8 + ( cs_s[i].item_count * 6 ));
++		WFIFOSET( fd, length );
 +	}
 +}
 +
@@ -246,15 +250,15 @@ index 8b38028..9a0391a 100644
 +		if( tab < 0 || tab > CASHSHOP_TAB_MAX )
 +			continue;
 +
-+		for( j = 0; j < cs_s[tab].item_count; j++ ) {
-+			if( cs_s[tab].data[j]->id == id )
++		for( j = 0; j < cash_shop_items[tab].count; j++ ) {
++			if( cash_shop_items[tab].item[j]->id == id )
 +				break;
 +		}
-+		if( j < cs_s[tab].item_count ) {
++		if( j < cash_shop_items[tab].count ) {
 +			struct item_data *data;
-+			if( sd->cashPoints < (cs_s[tab].data[j]->price * qty) ) {
++			if( sd->cashPoints < (cash_shop_items[tab].item[j]->price * qty) ) {
 +				result = CSBR_SHORTTAGE_CASH;
-+			} else if ( !( data = itemdb_exists(cs_s[tab].data[j]->id) ) ) {
++			} else if ( !( data = itemdb_exists(cash_shop_items[tab].item[j]->id) ) ) {
 +				result = CSBR_UNKONWN_ITEM;
 +			} else {
 +				struct item item_tmp;
@@ -265,7 +269,7 @@ index 8b38028..9a0391a 100644
 +				if (!itemdb_isstackable2(data))
 +					get_count = 1;
 +
-+				pc_paycash(sd, cs_s[tab].data[j]->price * qty, 0);/* kafra point support is missing */
++				pc_paycash(sd, cash_shop_items[tab].item[j]->price * qty, 0);/* kafra point support is missing */
 +				for (k = 0; k < qty; k += get_count) {
 +					if (!pet_create_egg(sd, data->nameid)) {
 +						memset(&item_tmp, 0, sizeof(item_tmp));
@@ -294,7 +298,7 @@ index 8b38028..9a0391a 100644
 +						}
 +
 +						if( result != CSBR_SUCCESS )
-+							pc_getcash(sd,cs_s[tab].data[j]->price * get_count, 0);/* kafra point support is missing */
++							pc_getcash(sd,cash_shop_items[tab].item[j]->price * get_count, 0);/* kafra point support is missing */
 +					}
 +				}
 +			}
@@ -316,7 +320,7 @@ index 8b38028..9a0391a 100644
  /*==========================================
   * Adoption System
   *==========================================*/
-@@ -17565,6 +17784,11 @@ static int packetdb_readdb(void)
+@@ -17565,6 +17787,11 @@ static int packetdb_readdb(void)
  		{clif_parse_SearchStoreInfoListItemClick,"searchstoreinfolistitemclick"},
  		//{ clif_parse_MoveItem , "moveitem" },
  		{clif_parse_ranking,"ranking"},
@@ -328,31 +332,38 @@ index 8b38028..9a0391a 100644
  		{NULL,NULL}
  	};
  
-@@ -17715,6 +17939,8 @@ static int packetdb_readdb(void)
-  *------------------------------------------*/
- int do_init_clif(void)
- {
-+	unsigned char i;
-+
- 	clif_config.packet_db_ver = -1; // the main packet version of the DB
- 	memset(clif_config.connect_cmd, 0, sizeof(clif_config.connect_cmd)); //The default connect command will be determined after reading the packet_db [Skotlex]
+@@ -17710,6 +17937,22 @@ static int packetdb_readdb(void)
+ 	return 0;
+ }
  
-@@ -17731,5 +17957,13 @@ int do_init_clif(void)
++/*
++ * Destroys cashshop class.
++ * Closes all and cleanup.
++ */
++void do_final_cashshop( void ){
++	int tab, i;
++
++	for( tab = CASHSHOP_TAB_NEW; tab < CASHSHOP_TAB_MAX; tab++ ){
++		for( i = 0; i < cash_shop_items[tab].count; i++ ){
++			aFree( cash_shop_items[tab].item[i] );
++		}
++		aFree( cash_shop_items[tab].item );
++	}
++	memset( cash_shop_items, 0, sizeof( cash_shop_items ) );
++}
++
+ /*==========================================
+  *
+  *------------------------------------------*/
+@@ -17731,5 +17974,6 @@ int do_init_clif(void)
  
  	add_timer_func_list(clif_clearunit_delayed_sub, "clif_clearunit_delayed_sub");
  	add_timer_func_list(clif_delayquit, "clif_delayquit");
 +
-+	for(i = 0; i < CASHSHOP_TAB_MAX; i++) {
-+		int k;
-+		for( k = 0; k < cs_s[i].item_count; k++ ) {
-+			aFree(cs_s[i].data[k]);
-+		}
-+		aFree(cs_s[i].data);
-+	}
  	return 0;
  }
 diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
-index 20b9b3a..60d0e11 100644
+index 20b9b3a..5c5bd2b 100644
 --- a/rewrite/src/map/clif.h
 +++ b/rewrite/src/map/clif.h
 @@ -341,6 +341,39 @@ enum ranking_type
@@ -382,20 +393,20 @@ index 20b9b3a..60d0e11 100644
 +	CSBR_UNKNOWN = 0xb,
 +};
 +
-+struct hCSData {
++struct cash_item_data{
 +	unsigned short id;
-+	unsigned int price;
++	uint32 price;
 +};
 +
-+struct cs_data{
-+	struct hCSData **data;
-+	unsigned int item_count;
++struct cash_item_db{
++	struct cash_item_data** item;
++	uint32 count;
 +};
 +
  int clif_setip(const char* ip);
  void clif_setbindip(const char* ip);
  void clif_setport(uint16 port);
-@@ -799,4 +832,12 @@ int clif_dressing_room(struct map_session_data *sd, int view);
+@@ -799,4 +832,13 @@ int clif_dressing_room(struct map_session_data *sd, int view);
  
  int clif_hom_spiritball(struct homun_data *hd);
  
@@ -405,6 +416,7 @@ index 20b9b3a..60d0e11 100644
 +void clif_parse_CashShopSchedule(int fd, struct map_session_data *sd);
 +void clif_parse_CashShopBuy(int fd, struct map_session_data *sd);
 +void clif_cashshop_db(void);
++void do_final_cashshop( void );
 +static int clif_cashshop_db_parserow( char** str, const char* source, int line );
 +
  #endif /* _CLIF_H_ */
@@ -420,3 +432,15 @@ index 2155bc4..d3e34f2 100644
  
  	return 0;
  }
+diff --git a/rewrite/src/map/map.c b/rewrite/src/map/map.c
+index 22a48ce..c61a9b2 100644
+--- a/rewrite/src/map/map.c
++++ b/rewrite/src/map/map.c
+@@ -3667,6 +3667,7 @@ void do_final(void)
+ 	do_final_unit();
+ 	do_final_battleground();
+ 	do_final_elemental();
++	do_final_cashshop();
+ 	
+ 	map_db->destroy(map_db, map_db_final);
+ 	
