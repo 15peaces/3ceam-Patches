@@ -4,7 +4,8 @@
  rewrite/src/map/clif.h     |  42 ++++++++
  rewrite/src/map/itemdb.c   |   1 +
  rewrite/src/map/map.c      |   1 +
- 6 files changed, 340 insertions(+), 4 deletions(-)
+ rewrite/src/map/script.c   |   6 +-
+ 7 files changed, 343 insertions(+), 7 deletions(-)
 
 diff --git a/rewrite/db/cashshop_db.txt b/rewrite/db/cashshop_db.txt
 new file mode 100644
@@ -444,3 +445,34 @@ index 22a48ce..c61a9b2 100644
  	
  	map_db->destroy(map_db, map_db_final);
  	
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index dbdc241..3193baa 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -13058,7 +13058,7 @@ BUILDIN_FUNC(npcshopitem)
+ 	int n, i;
+ 	int amount;
+ 
+-	if( !nd || nd->subtype != SHOP )
++	if( !nd || nd->subtype != SHOP && nd->subtype != CASHSHOP )
+ 	{	//Not found.
+ 		script_pushint(st,0);
+ 		return 0;
+@@ -13087,7 +13087,7 @@ BUILDIN_FUNC(npcshopadditem)
+ 	int n, i;
+ 	int amount;
+ 
+-	if( !nd || nd->subtype != SHOP )
++	if( !nd || nd->subtype != SHOP && nd->subtype != CASHSHOP )
+ 	{	//Not found.
+ 		script_pushint(st,0);
+ 		return 0;
+@@ -13118,7 +13118,7 @@ BUILDIN_FUNC(npcshopdelitem)
+ 	int amount;
+ 	int size;
+ 
+-	if( !nd || nd->subtype != SHOP )
++	if( !nd || nd->subtype != SHOP && nd->subtype != CASHSHOP )
+ 	{	//Not found.
+ 		script_pushint(st,0);
+ 		return 0;
