@@ -1,4 +1,5 @@
  rewrite/conf/atcommand_athena.conf                 |  25 +
+ rewrite/conf/battle/faction.conf                   | 112 +++
  rewrite/conf/battle_athena.conf                    |   3 +
  rewrite/conf/mapflag/nofvf.txt                     | 268 +++++++
  rewrite/conf/msg_athena.conf                       |  45 ++
@@ -13,7 +14,7 @@
  rewrite/sql-files/3CeAM_FactionWar_Patch_r800+.sql |   1 +
  rewrite/sql-files/main.sql                         |   1 +
  rewrite/src/char_sql/char.c                        |   8 +-
- rewrite/src/common/mmo.h                           |   1 +
+ rewrite/src/common/mmo.h                           |   3 +-
  rewrite/src/map/Makefile.in                        |   4 +-
  rewrite/src/map/atcommand.c                        | 403 ++++++++++-
  rewrite/src/map/battle.c                           | 124 +++-
@@ -42,7 +43,7 @@
  rewrite/src/map/vending.c                          |  13 +
  rewrite/vcproj-10/map-server_sql.vcxproj           |   2 +
  rewrite/vcproj-9/map-server_sql.vcproj             |   8 +
- 44 files changed, 3323 insertions(+), 106 deletions(-)
+ 45 files changed, 3436 insertions(+), 107 deletions(-)
 
 diff --git a/rewrite/conf/atcommand_athena.conf b/rewrite/conf/atcommand_athena.conf
 index 9e2d867..b0951e9 100644
@@ -108,6 +109,124 @@ index 9e2d867..b0951e9 100644
  // Changes the GM level of another character
  // (lasts until reboot, or gm list reload)
  adjgmlvl: 99,99
+diff --git a/rewrite/conf/battle/faction.conf b/rewrite/conf/battle/faction.conf
+new file mode 100644
+index 0000000..a138bfa
+--- /dev/null
++++ b/rewrite/conf/battle/faction.conf
+@@ -0,0 +1,112 @@
++//--------------------------------------------------------------
++// Faction system configuration file [Lilith]
++// Ported to 3ceam by 15peaces
++//--------------------------------------------------------------
++// Note 1: Value is a config switch (on/off, yes/no or 1/0)
++// Note 2: Value is in percents (100 means 100%)
++// Note 3: Value is a bit field. If no description is given,
++//         assume unit types (1: Pc, 2: Mob, 4: Pet, 8: Homun, 16: Mercenary, 128: NPC, 512: Elemental)
++//--------------------------------------------------------------
++
++// What unit type can receive faction status (race, element...) Note 3
++// 539 = PC(1) + MOB(2) + HOM(8) + MER(16) + ELEM(512) (Default)
++faction_status_bl: 539
++
++// Can faction monsters attack non-faction monsters? (Note. 1)  
++fvf_monster_ai: yes
++
++// Faction chat settings.
++// 1 = Colored messages
++// 2 = Hide names from other factions (except Alliance)
++// 3 = 1+2 (Default)
++faction_chat_settings: 3
++
++// Start FvF mapflag on all maps? (Note. 1)
++fvf_in_all_maps: yes
++
++// Display HP bar in the same factions? (Note. 1)
++fvf_hp_bar: yes
++
++// Damage adjustment settings, these follow the same logic as their WoE counterparts (see guild.conf)
++fvf_short_attack_damage_rate: 80
++fvf_long_attack_damage_rate: 80
++fvf_weapon_attack_damage_rate: 60
++fvf_magic_attack_damage_rate: 60
++fvf_misc_attack_damage_rate: 60
++
++// Change this to define the minimum level players can fight in FvF
++fvf_min_lvl: 55
++
++// Display unit's faction size? (visual effect)
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++fvf_visual_size: 1
++
++// Unit type for setting 'fvf_visual_size'. (Note 3 except Mercenaries)
++// 527 = PC(1) + MOB(2) + PET(4) + HOM(8) + ELEM(512) (Default)
++faction_size_bl: 527
++
++// Display faction aura?
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++faction_aura_settings: 1
++
++// What unit type can receive 'faction_aura_settings'. (Note 3)
++// 671 = PC(1) + MOB(2) + PET(4) + HOM(8) + MER(16) + NPC(128) + ELEM(512) (Default)
++faction_aura_bl: 671
++
++// What unit type can display 'enemy' over head?
++// 539 = PC(1) + MOB(2) + HOM(8) + MER(16) + ELEM(512) (Default)
++// 0 = disable swords over head and enable faction icons (see db/faction_emblem/)
++faction_ally_info_bl: 539
++
++// Faction leader message color ( @factionannounce <message> )
++// 0xRRGGBB
++chat_leader: 0xFF66FF
++
++// Should the player's dye change own color?
++// 0 - disable
++// 1 - only FvF maps (Default)
++// 2 - everywhere
++fvf_change_ccolor: 1
++
++// Can the faction with race or element Undead/Demon use healing skills to oneself ? (Note 1)
++// 0 - disable
++// 1 - Only same faction members (Default)
++// 2 - Alliance faction members
++faction_heal_settings: 1
++
++// What unit type can receive 'faction_heal_settings'. (Note 3)
++// 19 = PC(1) + MOB(2) + MER(16) (Default)
++faction_heal_bl: 19
++
++// Faction party settings:
++// 0 - Allow members to talk with NPC in same faction (Default)
++// 1 - Allow members from alliance to talk with NPC
++// 2 - No restrictions
++faction_npc_settings: 0
++
++// Faction party settings:
++// 0 - Allow members in same faction to join same party (Default)
++// 1 - Allow faction members from alliance to join same party
++// 2 - No restrictions
++faction_party_settings: 0
++
++// Faction guild settings:
++// 0 - Allow members in same faction to join same guild (Default)
++// 1 - Allow faction members from alliance to join same guild
++// 2 - No restrictions
++faction_guild_settings: 0
++
++// Faction trade settings:
++// 0 - Allow members in same faction to trade (Default)
++// 1 - Allow faction members from alliance to trade
++// 2 - No restrictions
++faction_trade_settings: 0
++
++// Max Discount & overcharge settings ( percentage )
++// By default: max discount is -100%, overcharge is 100%
++faction_disc_min: -100
++faction_disc_max: 100
 diff --git a/rewrite/conf/battle_athena.conf b/rewrite/conf/battle_athena.conf
 index a867382..48739d8 100644
 --- a/rewrite/conf/battle_athena.conf
@@ -1053,9 +1172,18 @@ index 2b94acb..724ead7 100644
  	{
  		SqlStmt_ShowDebug(stmt);
 diff --git a/rewrite/src/common/mmo.h b/rewrite/src/common/mmo.h
-index 9bb871a..ea6e84b 100644
+index 9bb871a..6585f55 100644
 --- a/rewrite/src/common/mmo.h
 +++ b/rewrite/src/common/mmo.h
+@@ -48,7 +48,7 @@
+ 
+ #ifndef PACKETVER
+ 	//#define PACKETVER	20081126
+-	#define PACKETVER 20151029
++	#define PACKETVER 20131223
+ #endif
+ // backward compatible PACKETVER 8 and 9
+ #if PACKETVER == 8
 @@ -407,6 +407,7 @@ struct mmo_charstatus {
  	bool show_equip;
  	short rename;
