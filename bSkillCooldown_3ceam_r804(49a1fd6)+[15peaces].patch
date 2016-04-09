@@ -1,0 +1,222 @@
+ rewrite/db/const.txt       |  2 ++
+ rewrite/doc/item_bonus.txt |  5 ++++-
+ rewrite/src/map/map.h      |  3 ++-
+ rewrite/src/map/pc.c       | 47 ++++++++++++++++++++++++++++++++++++++++++++--
+ rewrite/src/map/pc.h       |  9 +++++++--
+ rewrite/src/map/script.c   |  1 +
+ rewrite/src/map/skill.c    | 13 ++++++++++++-
+ rewrite/src/map/status.c   |  1 +
+ 8 files changed, 74 insertions(+), 7 deletions(-)
+
+diff --git a/rewrite/db/const.txt b/rewrite/db/const.txt
+index ea600f4..40e018e 100644
+--- a/rewrite/db/const.txt
++++ b/rewrite/db/const.txt
+@@ -600,6 +600,8 @@ bMagicSPGainValue	2043
+ bMagicHPGainValue	2044
+ bAddClassDropItem	2045
+ 
++bSkillCooldown	2050
++
+ bFixedCastRate	2101
+ bAddMatk	2102
+ 
+diff --git a/rewrite/doc/item_bonus.txt b/rewrite/doc/item_bonus.txt
+index c41337c..2ea582d 100644
+--- a/rewrite/doc/item_bonus.txt
++++ b/rewrite/doc/item_bonus.txt
+@@ -28,6 +28,7 @@
+ //=   bHPDrainValueRace, bMagicSPGainValue and bMagicHPGainValue. [Ai4rei]
+ //= 1.1.20130626 - Added bFixedCastTime. [Rytech]
+ //= 1.1.20140908 - Added bAddMatk. [Rytech]
++//= 1.1.20160409 - Added bSkillCooldown. [15peaces]
+ //===== Description =======================================
+ //= List of script instructions used in item bonuses,
+ //= mainly bonus/bonus2/bonus3/bonus4/bonus5 arguments
+@@ -444,4 +445,6 @@ bonus3 bAddClassDropItem,s,x,n;		Adds an n/100% chance of dropping item s when k
+ 
+ bonus bFixedCastrate,-n;	Skill fixed cast time reduction in percentage. n is the percentage value and must be set as a negeative value.
+ bonus2 bFixedCastrate,x,-n;	Skill fixed cast time reduction for a certain skill. x is the skill ID. n is the percentage value and must be set as a negeative value.
+-bonus bAddMatk,n;		Magical attack power + n
++bonus bAddMatk,n;			Magical attack power + n
++bonus2 bSkillCooldown,sk,t;	Increases cooldown of skill sk by t milliseconds
++
+diff --git a/rewrite/src/map/map.h b/rewrite/src/map/map.h
+index 5a6241e..58bc287 100644
+--- a/rewrite/src/map/map.h
++++ b/rewrite/src/map/map.h
+@@ -396,7 +396,8 @@ enum _sp {
+ 	SP_ADD_SKILL_BLOW, SP_SP_VANISH_RATE, SP_MAGIC_SP_GAIN_VALUE, SP_MAGIC_HP_GAIN_VALUE, SP_ADD_CLASS_DROP_ITEM, //2041-2045
+ 	
+ 	//3CeAM
+-	SP_FIXEDCASTRATE = 2101, //2101
++	SP_SKILL_COOLDOWN = 2050,	//2050
++	SP_FIXEDCASTRATE = 2101,	//2101
+ 	SP_ADD_MATK, SP_BASETHIRD,SP_MAX_HAIR_DYE,SP_MAX_HAIR_STYLE,SP_MAX_BODY_DYE,SP_MAX_BODY_STYLE
+ };
+ 
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index cd7a25a..baef84f 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -3260,6 +3260,23 @@ int pc_bonus2(struct map_session_data *sd,int type,int type2,int val)
+ 			sd->ignore_def[type2] += val;
+ 		break;
+ 
++	case SP_SKILL_COOLDOWN: // bonus2 bSkillCooldown,sk,t; Thanks to rAthena. [15peaces]
++		if(sd->state.lr_flag == 2)
++			break;
++		ARR_FIND(0, ARRAYLENGTH(sd->skillcooldown), i, sd->skillcooldown[i].id == 0 || sd->skillcooldown[i].id == type2);
++		if (i == ARRAYLENGTH(sd->skillcooldown))
++		{
++			ShowError("pc_bonus2: SP_SKILL_COOLDOWN: Reached max (%d) number of skills per character, bonus skill %d (%d) lost.\n", ARRAYLENGTH(sd->skillcooldown), type2, val);
++			break;
++		}
++		if (sd->skillcooldown[i].id == type2)
++			sd->skillcooldown[i].val += val;
++		else {
++			sd->skillcooldown[i].id = type2;
++			sd->skillcooldown[i].val = val;
++		}
++		break;
++
+ 	default:
+ 		ShowWarning("pc_bonus2: unknown type %d %d %d!\n",type,type2,val);
+ 		break;
+@@ -4886,10 +4903,36 @@ int pc_memo(struct map_session_data* sd, int pos)
+ }
+ 
+ //
+-// •Ší??
++// Skills
+ //
++
++/**
++ * Get the skill current cooldown for player.
++ * (get the db base cooldown for skill + player specific cooldown)
++ * @param sd : player pointer
++ * @param id : skill id
++ * @param lv : skill lv
++ * @return player skill cooldown
++ */
++int pc_get_skillcooldown(struct map_session_data *sd, uint16 skill_id, uint16 skill_lv) {
++	uint8 i;
++	uint16 idx = skill_get_index(skill_id);
++	int cooldown = 0, cooldownlen = ARRAYLENGTH(sd->skillcooldown);
++	
++	if (!idx) return 0;
++	if (skill_db[idx].cooldown[skill_lv - 1])
++		cooldown = skill_db[idx].cooldown[skill_lv - 1];
++
++	ARR_FIND(0, cooldownlen, i, sd->skillcooldown[i].id == skill_id);
++	if (i < cooldownlen) {
++		cooldown += sd->skillcooldown[i].val;
++		cooldown = max(0,cooldown);
++	}
++	return cooldown;
++}
++
+ /*==========================================
+- * ƒXƒLƒ‹‚Ì?õ Š—L‚µ‚Ä‚¢‚½ê‡Lv‚ª•Ô‚é
++ * Return player sd skill_lv learned for given skill
+  *------------------------------------------*/
+ int pc_checkskill(struct map_session_data *sd,int skill_id)
+ {
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index eecb133..f55c736 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -263,10 +263,14 @@ struct map_session_data {
+ 	struct s_addeffect addeff[MAX_PC_BONUS], addeff2[MAX_PC_BONUS];
+ 	struct s_addeffectonskill addeff3[MAX_PC_BONUS];
+ 
+-	struct { //skillatk raises bonus dmg% of skills, skillheal increases heal%, skillblown increases bonus blewcount for some skills.
++	struct s_skill_bonus { //skillatk raises bonus dmg% of skills, skillheal increases heal%, skillblown increases bonus blewcount for some skills.
+ 		unsigned short id;
+ 		short val;
+-	} skillatk[MAX_PC_BONUS], skillheal[5], skillheal2[5], skillblown[MAX_PC_BONUS], skillcast[MAX_PC_BONUS], fixedskillcast[MAX_PC_BONUS];
++	} skillatk[MAX_PC_BONUS], skillheal[5], skillheal2[5], skillblown[MAX_PC_BONUS];
++	struct s_skill_bonus_i32 { // Copy of s_skill_bonus struct but for larger values [15peaces]
++		uint16 id;
++		int32 val;
++	} skillcooldown[MAX_PC_BONUS], skillcast[MAX_PC_BONUS], fixedskillcast[MAX_PC_BONUS];
+ 	struct {
+ 		short value;
+ 		int rate;
+@@ -657,6 +661,7 @@ int pc_isequip(struct map_session_data *sd,int n);
+ int pc_equippoint(struct map_session_data *sd,int n);
+ int pc_setinventorydata(struct map_session_data *sd);
+ 
++int pc_get_skillcooldown(struct map_session_data *sd, uint16 skill_id, uint16 skill_lv);
+ int pc_checkskill(struct map_session_data *sd,int skill_id);
+ int pc_checkallowskill(struct map_session_data *sd);
+ int pc_checkequip(struct map_session_data *sd,int pos);
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index dbdc241..32d0f44 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -7008,6 +7008,7 @@ BUILDIN_FUNC(bonus)
+ 	case SP_ADD_SKILL_BLOW:
+ 	case SP_CASTRATE:
+ 	case SP_FIXEDCASTRATE:
++	case SP_SKILL_COOLDOWN:
+ 	case SP_ADDEFF_ONSKILL:
+ 		// these bonuses support skill names
+ 		val1 = ( script_isstring(st,3) ? skill_name2id(script_getstr(st,3)) : script_getnum(st,3) );
+diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
+index 9e1f524..a27a716 100644
+--- a/rewrite/src/map/skill.c
++++ b/rewrite/src/map/skill.c
+@@ -4261,7 +4261,7 @@ int skill_castend_damage_id (struct block_list* src, struct block_list *bl, int
+ 			ARR_FIND(0,MAX_SPELLBOOK,i,sd->rsb[i].skillid != 0);
+ 			if( i < MAX_SPELLBOOK )
+ 			{ // SpellBook
+-				int rsb_skillid, rsb_skilllv;
++				int rsb_skillid, rsb_skilllv, cooldown;
+ 
+ 				if( skilllv > 1 )
+ 				{
+@@ -4301,6 +4301,9 @@ int skill_castend_damage_id (struct block_list* src, struct block_list *bl, int
+ 
+ 				sd->ud.canact_tick = tick + skill_delayfix(src, rsb_skillid, rsb_skilllv);
+ 				clif_status_change(src, SI_ACTIONDELAY, 1, skill_delayfix(src, rsb_skillid, rsb_skilllv), 0, 0, 1);
++					cooldown = pc_get_skillcooldown(sd,rsb_skillid, rsb_skilllv);
++				if( cooldown )
++					skill_blockpc_start(sd, rsb_skillid, cooldown);
+ 			}
+ 			else
+ 			{ // Summon Balls
+@@ -9739,6 +9742,10 @@ int skill_castend_id(int tid, unsigned int tick, int id, intptr data)
+ 			skill_blockpc_start(sd, ud->skillid, skill_get_cooldown(ud->skillid, ud->skilllv));
+ 		if( !sd || sd->skillitem != ud->skillid || skill_get_delay(ud->skillid,ud->skilllv) )
+ 			ud->canact_tick = tick + skill_delayfix(src, ud->skillid, ud->skilllv); //Tests show wings don't overwrite the delay but skill scrolls do. [Inkfish]
++		if (sd) { //Cooldown application
++			int cooldown = pc_get_skillcooldown(sd,ud->skillid, ud->skilllv); // Increases/Decreases cooldown of a skill by item/card bonuses.
++			if(cooldown) skill_blockpc_start(sd, ud->skillid, cooldown);
++		}
+ 		if( battle_config.display_status_timers && sd && skill_get_delay(ud->skillid, ud->skilllv))
+ 			clif_status_change(src, SI_ACTIONDELAY, 1, skill_delayfix(src, ud->skillid, ud->skilllv), 0, 0, 1);
+ 
+@@ -9966,6 +9973,10 @@ int skill_castend_pos(int tid, unsigned int tick, int id, intptr data)
+ 			skill_blockpc_start(sd, ud->skillid, skill_get_cooldown(ud->skillid, ud->skilllv));
+ 		if( !sd || sd->skillitem != ud->skillid || skill_get_delay(ud->skillid,ud->skilllv) )
+ 			ud->canact_tick = tick + skill_delayfix(src, ud->skillid, ud->skilllv);
++		if (sd) { //Cooldown application
++			int cooldown = pc_get_skillcooldown(sd,ud->skillid, ud->skilllv);
++			if(cooldown) skill_blockpc_start(sd, ud->skillid, cooldown);
++		}
+ 		if( battle_config.display_status_timers && sd && skill_get_delay(ud->skillid, ud->skilllv))
+ 			clif_status_change(src, SI_ACTIONDELAY, 1, skill_delayfix(src, ud->skillid, ud->skilllv), 0, 0, 1);
+ //		if( sd )
+diff --git a/rewrite/src/map/status.c b/rewrite/src/map/status.c
+index 27890a2..67156b1 100644
+--- a/rewrite/src/map/status.c
++++ b/rewrite/src/map/status.c
+@@ -2390,6 +2390,7 @@ int status_calc_pc_(struct map_session_data* sd, bool first)
+ 		+ sizeof(sd->skillblown)
+ 		+ sizeof(sd->skillcast)
+ 		+ sizeof(sd->fixedskillcast)
++		+ sizeof(sd->skillcooldown)
+ 		+ sizeof(sd->add_def)
+ 		+ sizeof(sd->add_mdef)
+ 		+ sizeof(sd->add_mdmg)
