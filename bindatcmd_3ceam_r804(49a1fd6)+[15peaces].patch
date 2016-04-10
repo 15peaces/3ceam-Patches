@@ -1,0 +1,370 @@
+ rewrite/doc/script_commands.txt | 26 ++++++++++-
+ rewrite/src/map/atcommand.c     | 40 +++++++++++++++++
+ rewrite/src/map/atcommand.h     | 13 ++++++
+ rewrite/src/map/npc.c           | 66 ++++++++++++++++++++++++++++
+ rewrite/src/map/npc.h           |  3 ++
+ rewrite/src/map/script.c        | 97 +++++++++++++++++++++++++++++++++++++++++
+ rewrite/src/map/script.h        |  3 ++
+ 7 files changed, 247 insertions(+), 1 deletion(-)
+
+diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
+index db45581..6b25976 100644
+--- a/rewrite/doc/script_commands.txt
++++ b/rewrite/doc/script_commands.txt
+@@ -4,7 +4,7 @@
+ //= A reference manual for the eAthena scripting language.
+ //= Commands are sorted depending on their functionality.
+ //===== Version ===========================================
+-//= 3.51.20130619
++//= 3.52.20160410
+ //=========================================================
+ //= 1.0 - First release, filled will as much info as I could
+ //=       remember or figure out, most likely there are errors,
+@@ -194,6 +194,8 @@
+ //= 3.51.20130619
+ //=       Added 'setdragon', 'checkdragon', 'setwug', 'checkwug', 
+ //=       'setwugrider', 'checkwugrider', 'setmadogear', 'checkmadogear'. [Rytech]
++//= 3.52.20160410
++//=       Added 'bindatcmd', 'unbindatcmd', 'useatcmd' [15peaces]
+ //=========================================================
+ 
+ This document is a reference manual for all the scripting commands and functions 
+@@ -2153,6 +2155,28 @@ array, shifting all the elements beyond this towards the beginning.
+ 
+ ---------------------------------------
+ 
++*bindatcmd "command","{NPC NAME}::<event label>"{,atcommand level,charcommand level}; 
++*bindatcmd ("command","{NPC NAME}::<event label>"{,atcommand level,charcommand level}); 
++
++This command will bind a NPC event label to an atcommand. Upon execution of 
++the atcommand the user will invoke the NPC event label. 
++
++--------------------------------------- 
++ 
++*unbindatcmd "command"; 
++*unbindatcmd ("command"); 
++ 
++This command will unbind a NPC event label from an atcommand. 
++
++--------------------------------------- 
++ 
++*useatcmd "command"; 
++*useatcmd ("command"); 
++ 
++This command will execute a custom atcommand on the attached RID from a script. 
++	
++ ---------------------------------------
++
+ ======================================
+ |2.- Information-retrieving commands.|
+ ======================================
+diff --git a/rewrite/src/map/atcommand.c b/rewrite/src/map/atcommand.c
+index c22ff1b..d346b3d 100644
+--- a/rewrite/src/map/atcommand.c
++++ b/rewrite/src/map/atcommand.c
+@@ -64,6 +64,17 @@ typedef struct AtCommandInfo
+ static AtCommandInfo* get_atcommandinfo_byname(const char* name);
+ static AtCommandInfo* get_atcommandinfo_byfunc(const AtCommandFunc func);
+ 
++// @commands (script-based) 
++struct Atcmd_Binding* get_atcommandbind_byname(const char* name) 
++{ 
++	int i = 0; 
++	if( *name == atcommand_symbol || *name == charcommand_symbol ) 
++		name++; // for backwards compatibility 
++	ARR_FIND( 0, ARRAYLENGTH(atcmd_binding), i, strcmp(atcmd_binding[i].command, name) == 0 ); 
++	return ( i < ARRAYLENGTH(atcmd_binding) ) ? &atcmd_binding[i] : NULL; 
++	return NULL; 
++}
++
+ ACMD_FUNC(commands);
+ 
+ 
+@@ -9539,6 +9550,9 @@ bool is_atcommand(const int fd, struct map_session_data* sd, const char* message
+ 	TBL_PC * ssd = NULL; //sd for target
+ 	AtCommandInfo * info;
+ 
++	// @commands (script based) 
++	Atcmd_Binding * binding;
++
+ 	nullpo_retr(false, sd);
+ 	
+ 	//Shouldn't happen
+@@ -9627,6 +9641,32 @@ bool is_atcommand(const int fd, struct map_session_data* sd, const char* message
+ 	if( sscanf(atcmd_msg, "%99s %99[^\n]", command, params) < 2 )
+ 		params[0] = '\0';
+ 	
++	// @commands (script based) 
++	if(type == 1) { 
++		// Check if the command initiated is a character command 
++		if (*message == charcommand_symbol && 
++		(ssd = map_nick2sd(charname)) == NULL && (ssd = map_nick2sd(charname2)) == NULL ) 
++		{ 
++			sprintf(output, "%s failed. Player not found.", command); 
++			clif_displaymessage(fd, output); 
++			return true; 
++		} 
++
++		// Get atcommand binding 
++		binding = get_atcommandbind_byname(command); 
++
++		// Check if the binding isn't NULL and there is a NPC event, level of usage met, et cetera 
++		if( binding != NULL && binding->npc_event[0] && 
++		((*atcmd_msg == atcommand_symbol && pc_isGM(sd) >= binding->level) || 
++		(*atcmd_msg == charcommand_symbol && pc_isGM(sd) >= binding->level2))) 
++		{ 
++			// Check if self or character invoking; if self == character invoked, then self invoke. 
++			bool invokeFlag = ((*atcmd_msg == atcommand_symbol) ? 1 : 0); 
++			npc_do_atcmd_event((invokeFlag ? sd : ssd), command, params, binding->npc_event); 
++			return true; 
++		} 
++	}
++
+ 	//Grab the command information and check for the proper GM level required to use it or if the command exists
+ 	info = get_atcommandinfo_byname(command);
+ 	if( info == NULL || info->func == NULL || ( type && ((*atcmd_msg == atcommand_symbol && pc_isGM(sd) < info->level) || (*atcmd_msg == charcommand_symbol && pc_isGM(sd) < info->level2)) ) )
+diff --git a/rewrite/src/map/atcommand.h b/rewrite/src/map/atcommand.h
+index 37ce87c..a4e1129 100644
+--- a/rewrite/src/map/atcommand.h
++++ b/rewrite/src/map/atcommand.h
+@@ -45,4 +45,17 @@ char* msg_txt(int msg_number);
+ int msg_config_read(const char* cfgName);
+ void do_final_msg(void);
+ 
++#define MAX_ATCMD_BINDINGS 100 
++
++// @commands (script based) 
++typedef struct Atcmd_Binding { 
++	char command[50]; 
++	char npc_event[50]; 
++	int level; 
++	int level2; 
++} Atcmd_Binding; 
++ 
++struct Atcmd_Binding atcmd_binding[MAX_ATCMD_BINDINGS]; 
++struct Atcmd_Binding* get_atcommandbind_byname(const char* name);
++
+ #endif /* _ATCOMMAND_H_ */
+diff --git a/rewrite/src/map/npc.c b/rewrite/src/map/npc.c
+index eaf2fcf..90f7a4e 100644
+--- a/rewrite/src/map/npc.c
++++ b/rewrite/src/map/npc.c
+@@ -2752,6 +2752,72 @@ void npc_setclass(struct npc_data* nd, short class_)
+ 	clif_spawn(&nd->bl);// fade in
+ }
+ 
++// @commands (script based) 
++int npc_do_atcmd_event(struct map_session_data* sd, const char* command, const char* message, const char* eventname) 
++{ 
++	struct event_data* ev = (struct event_data*)strdb_get(ev_db, eventname); 
++	struct npc_data *nd; 
++	struct script_state *st; 
++	int i = 0, j = 0, k = 0; 
++	char *temp; 
++	temp = (char*)aMalloc(strlen(message) + 1); 
++
++	nullpo_ret(sd); 
++
++	if( ev == NULL || (nd = ev->nd) == NULL ) 
++	{ 
++		ShowError("npc_event: event not found [%s]\n", eventname); 
++		return 0; 
++	} 
++
++	if( sd->npc_id != 0 ) 
++	{ // Enqueue the event trigger. 
++		int i; 
++		ARR_FIND( 0, MAX_EVENTQUEUE, i, sd->eventqueue[i][0] == '\0' ); 
++		if( i < MAX_EVENTQUEUE ) 
++		{ 
++			safestrncpy(sd->eventqueue[i],eventname,50); //Event enqueued. 
++			return 0; 
++		} 
++
++		ShowWarning("npc_event: player's event queue is full, can't add event '%s' !\n", eventname); 
++		return 1; 
++	} 
++ 
++	if( ev->nd->sc.option&OPTION_INVISIBLE ) 
++	{ // Disabled npc, shouldn't trigger event. 
++		npc_event_dequeue(sd); 
++		return 2; 
++	} 
++
++	st = script_alloc_state(ev->nd->u.scr.script, ev->pos, sd->bl.id, ev->nd->bl.id); 
++	setd_sub(st, NULL, ".@atcmd_command$", 0, (void *)command, NULL); 
++
++	// split atcmd parameters based on spaces 
++	i = 0; 
++	j = 0; 
++	while( message[i] != '\0' ) 
++	{ 
++		if( message[i] == ' ' && k < 127 ) 
++		{ 
++			temp[j] = '\0'; 
++			setd_sub(st, NULL, ".@atcmd_parameters$", k++, (void *)temp, NULL); 
++			j = 0; 
++			++i; 
++		} 
++		else 
++			temp[j++] = message[i++]; 
++	} 
++
++	temp[j] = '\0'; 
++	setd_sub(st, NULL, ".@atcmd_parameters$", k++, (void *)temp, NULL); 
++	setd_sub(st, NULL, ".@atcmd_numparameters", 0, (void *)&k, NULL); 
++	aFree(temp); 
++ 
++	run_script_main(st); 
++	return 0; 
++}
++
+ /// Parses a function.
+ /// function%TAB%script%TAB%<function name>%TAB%{<code>}
+ static const char* npc_parse_function(char* w1, char* w2, char* w3, char* w4, const char* start, const char* buffer, const char* filepath)
+diff --git a/rewrite/src/map/npc.h b/rewrite/src/map/npc.h
+index a512e30..bb59615 100644
+--- a/rewrite/src/map/npc.h
++++ b/rewrite/src/map/npc.h
+@@ -163,4 +163,7 @@ int npc_cashshop_buylist(struct map_session_data* sd, int n, unsigned short* ite
+ 
+ extern struct npc_data* fake_nd;
+ 
++// @commands (script-based) 
++int npc_do_atcmd_event(struct map_session_data* sd, const char* command, const char* message, const char* eventname);
++
+ #endif /* _NPC_H_ */
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index 48ea068..889bed4 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -3763,6 +3763,11 @@ int do_final_script()
+ 	scriptlabel_db->destroy(scriptlabel_db,NULL);
+ 	userfunc_db->destroy(userfunc_db,do_final_userfunc_sub);
+ 	autobonus_db->destroy(autobonus_db, do_final_autobonus_sub);
++
++	// @commands (script based) 
++	// Clear bindings 
++	memset(atcmd_binding,0,sizeof(atcmd_binding)); 
++
+ 	if(sleep_db) {
+ 		struct linkdb_node *n = (struct linkdb_node *)sleep_db;
+ 		while(n) {
+@@ -15074,6 +15079,91 @@ BUILDIN_FUNC(opendressroom)
+ 	return 0;
+ }
+ 
++/** 
++ * @commands (script based) 
++ **/ 
++BUILDIN_FUNC(bindatcmd) 
++{ 
++	const char* atcmd; 
++	const char* eventName; 
++	int i = 0, level = 0, level2 = 0; 
++
++	atcmd = script_getstr(st,2); 
++	eventName = script_getstr(st,3); 
++
++	if( script_hasdata(st,4) ) level = script_getnum(st,4); 
++	if( script_hasdata(st,5) ) level2 = script_getnum(st,5); 
++
++	// check if event is already binded 
++	ARR_FIND(0, MAX_ATCMD_BINDINGS, i, strcmp(atcmd_binding[i].command,atcmd) == 0); 
++	if( i < MAX_ATCMD_BINDINGS ) 
++	{ 
++		safestrncpy(atcmd_binding[i].npc_event, eventName, 50); 
++		atcmd_binding[i].level = level; 
++		atcmd_binding[i].level2 = level2; 
++	} 
++	else 
++	{ // make new binding 
++		ARR_FIND(0, MAX_ATCMD_BINDINGS, i, atcmd_binding[i].command[0] == '\0'); 
++		if( i < MAX_ATCMD_BINDINGS ) 
++		{ 
++			safestrncpy(atcmd_binding[i].command, atcmd, 50); 
++			safestrncpy(atcmd_binding[i].npc_event, eventName, 50); 
++			atcmd_binding[i].level = level; 
++			atcmd_binding[i].level2 = level2; 
++		} 
++	} 
++
++	return 0; 
++} 
++ 
++BUILDIN_FUNC(unbindatcmd) 
++{ 
++	const char* atcmd; 
++	int i =  0; 
++
++	atcmd = script_getstr(st, 2); 
++
++	ARR_FIND(0, MAX_ATCMD_BINDINGS, i, strcmp(atcmd_binding[i].command, atcmd) == 0); 
++	if( i < MAX_ATCMD_BINDINGS ) 
++		memset(&atcmd_binding[i],0,sizeof(atcmd_binding[0])); 
++
++	return 0; 
++} 
++ 
++BUILDIN_FUNC(useatcmd) 
++{ 
++	TBL_PC dummy_sd; 
++	TBL_PC* sd; 
++	int fd; 
++	const char* cmd; 
++
++	cmd = script_getstr(st,2); 
++
++	if( st->rid ) 
++	{ 
++		sd = script_rid2sd(st); 
++		fd = sd->fd; 
++	} 
++	else 
++	{ // Use a dummy character. 
++		sd = &dummy_sd; 
++		fd = 0; 
++ 
++		memset(&dummy_sd, 0, sizeof(TBL_PC)); 
++		if( st->oid ) 
++		{ 
++			struct block_list* bl = map_id2bl(st->oid); 
++			memcpy(&dummy_sd.bl, bl, sizeof(struct block_list)); 
++			if( bl->type == BL_NPC ) 
++				safestrncpy(dummy_sd.status.name, ((TBL_NPC*)bl)->name, NAME_LENGTH); 
++		} 
++	} 
++
++	is_atcommand(fd, sd, cmd, 1); 
++	return 0;
++}
++
+ // declarations that were supposed to be exported from npc_chat.c
+ #ifdef PCRE_SUPPORT
+ BUILDIN_FUNC(defpattern);
+@@ -15479,6 +15569,13 @@ struct script_function buildin_func[] = {
+ 	BUILDIN_DEF(has_instance,"s?"),
+ 	BUILDIN_DEF(instance_warpall,"sii?"),
+ 
++	/** 
++	 * @commands (script based) 
++	 **/ 
++	BUILDIN_DEF(bindatcmd, "ss??"), 
++	BUILDIN_DEF(unbindatcmd, "s"), 
++	BUILDIN_DEF(useatcmd, "s"),
++
+ 	//Quest Log System [Inkfish]
+ 	BUILDIN_DEF(setquest, "i"),
+ 	BUILDIN_DEF(erasequest, "i"),
+diff --git a/rewrite/src/map/script.h b/rewrite/src/map/script.h
+index c272f2d..1f421c0 100644
+--- a/rewrite/src/map/script.h
++++ b/rewrite/src/map/script.h
+@@ -180,4 +180,7 @@ int add_str(const char* p);
+ const char* get_str(int id);
+ int script_reload(void);
+ 
++// @commands (script based) 
++void setd_sub(struct script_state *st, TBL_PC *sd, const char *varname, int elem, void *value, struct linkdb_node **ref); 
++
+ #endif /* _SCRIPT_H_ */
