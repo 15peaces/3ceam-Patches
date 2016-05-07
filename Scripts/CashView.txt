@@ -1,0 +1,41 @@
+//===== 15peaces RO Scripts ==================================
+//= Atcommands: View Cashpoint Balance of a player
+//===== By: ================================================== 
+//= 15peaces
+//===== Current Version: ===================================== 
+//= 1.0
+//===== Compatible With: ===================================== 
+//= 15-3athena Project 
+//= 3ceam, eAthena (bindatcmd needed)
+//===== Description: ========================================= 
+//= This binds an atcommand so you can view the Cashpoint 
+//= balance on your server.
+//============================================================
+
+-	script	CashView	-1,{
+	end;
+
+OnInit:
+	bindatcmd "viewcash",strnpcinfo(0)+"::OnAtcommand",99,99;
+	end;
+
+OnAtcommand:
+	if(.@atcmd_parameters$[0] == "")
+		dispbottom "@viewcash: Usage: @viewcash [character name]";
+	else {
+		for(set .@i,0; .@i < .@atcmd_numparameters; set .@i,.@i+1)
+			set .@char$, .@char$+.@atcmd_parameters$[.@i]+" ";
+		
+		set .@char$, escape_sql(.@char$);
+		query_sql("SELECT `account_id` from `char` WHERE `name` = '"+.@char$+"'",.@id);
+
+		if(!.@id)
+			dispbottom "@viewcash: Character not found.";
+		else {
+			query_sql("SELECT `value` from `global_reg_value` WHERE `str` = '#CASHPOINTS' AND `account_id` = '"+.@id+"'",.@cash);
+			query_sql("SELECT `value` from `global_reg_value` WHERE `str` = '#KAFRAPOINTS' AND `account_id` = '"+.@id+"'",.@kafra);
+			dispbottom "@viewcash: "+.@char$+" got "+.@cash+" Cashpoints and "+.@kafra+" Kafrapoints";
+		}
+	}
+	end;
+}

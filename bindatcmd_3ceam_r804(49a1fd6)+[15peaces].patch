@@ -2,10 +2,10 @@
  rewrite/src/map/atcommand.c     | 40 +++++++++++++++++
  rewrite/src/map/atcommand.h     | 13 ++++++
  rewrite/src/map/npc.c           | 66 ++++++++++++++++++++++++++++
- rewrite/src/map/npc.h           |  3 ++
+ rewrite/src/map/npc.h           | 10 +++++
  rewrite/src/map/script.c        | 97 +++++++++++++++++++++++++++++++++++++++++
  rewrite/src/map/script.h        |  3 ++
- 7 files changed, 247 insertions(+), 1 deletion(-)
+ 7 files changed, 254 insertions(+), 1 deletion(-)
 
 diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
 index db45581..6b25976 100644
@@ -146,7 +146,7 @@ index 37ce87c..a4e1129 100644
 +
  #endif /* _ATCOMMAND_H_ */
 diff --git a/rewrite/src/map/npc.c b/rewrite/src/map/npc.c
-index eaf2fcf..90f7a4e 100644
+index eaf2fcf..b30afdb 100644
 --- a/rewrite/src/map/npc.c
 +++ b/rewrite/src/map/npc.c
 @@ -2752,6 +2752,72 @@ void npc_setclass(struct npc_data* nd, short class_)
@@ -195,24 +195,24 @@ index eaf2fcf..90f7a4e 100644
 +	setd_sub(st, NULL, ".@atcmd_command$", 0, (void *)command, NULL); 
 +
 +	// split atcmd parameters based on spaces 
-+	i = 0; 
-+	j = 0; 
-+	while( message[i] != '\0' ) 
-+	{ 
-+		if( message[i] == ' ' && k < 127 ) 
-+		{ 
-+			temp[j] = '\0'; 
-+			setd_sub(st, NULL, ".@atcmd_parameters$", k++, (void *)temp, NULL); 
-+			j = 0; 
-+			++i; 
++	
++	temp = (char*)aMalloc(strlen(message) + 1);
++
++	for( i = 0; i < ( strlen( message ) + 1 ) && k < 127; i ++ ) {
++		if( message[i] == ' ' || message[i] == '\0' ) {
++			if( message[ ( i - 1 ) ] == ' ' ) {
++				continue; // To prevent "@atcmd [space][space][space]..."
++			}
++			temp[k] = '\0';
++			k = 0;
++			setd_sub( st, NULL, ".@atcmd_parameters$", j++, (void *)temp, NULL );
++		} else {
++			temp[k] = message[i];
++			k++;
 +		} 
-+		else 
-+			temp[j++] = message[i++]; 
 +	} 
 +
-+	temp[j] = '\0'; 
-+	setd_sub(st, NULL, ".@atcmd_parameters$", k++, (void *)temp, NULL); 
-+	setd_sub(st, NULL, ".@atcmd_numparameters", 0, (void *)&k, NULL); 
++	setd_sub(st, NULL, ".@atcmd_numparameters", 0, (void *)__64BPRTSIZE(j), NULL);
 +	aFree(temp); 
 + 
 +	run_script_main(st); 
@@ -223,10 +223,24 @@ index eaf2fcf..90f7a4e 100644
  /// function%TAB%script%TAB%<function name>%TAB%{<code>}
  static const char* npc_parse_function(char* w1, char* w2, char* w3, char* w4, const char* start, const char* buffer, const char* filepath)
 diff --git a/rewrite/src/map/npc.h b/rewrite/src/map/npc.h
-index a512e30..bb59615 100644
+index a512e30..9ce284a 100644
 --- a/rewrite/src/map/npc.h
 +++ b/rewrite/src/map/npc.h
-@@ -163,4 +163,7 @@ int npc_cashshop_buylist(struct map_session_data* sd, int n, unsigned short* ite
+@@ -11,6 +11,13 @@ struct block_list;
+ struct npc_data;
+ struct view_data;
+ 
++/* pointer size fix which fixes several gcc warnings */
++// currently only used by bindatcmd script, so best to place here [15peaces]
++#ifdef __64BIT__
++	#define __64BPRTSIZE(y) (intptr)y
++#else
++	#define __64BPRTSIZE(y) y
++#endif
+ 
+ struct npc_timerevent_list {
+ 	int timer,pos;
+@@ -163,4 +170,7 @@ int npc_cashshop_buylist(struct map_session_data* sd, int n, unsigned short* ite
  
  extern struct npc_data* fake_nd;
  
