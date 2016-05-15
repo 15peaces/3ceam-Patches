@@ -1,0 +1,66 @@
+//===== 15peaces RO Scripts ==================================
+//= MvP Ranking
+//===== By: ================================================== 
+//= 15peaces
+//===== Current Version: ===================================== 
+//= 1.0
+//===== Compatible With: ===================================== 
+//= 15-3athena Project (SQL)
+//= 3ceam (SQL), eAthena (SQL)
+//===== Description: ========================================= 
+//= This is a simple MvP Ranking Script including a reset 
+//= function.
+//=
+//= YOU'LL NEED TO QUERY THE FOLLOWING INTO YOUR MYSQL-DB:
+//= ALTER TABLE `char` ADD COLUMN `mvp` INTEGER UNSIGNED NOT NULL DEFAULT '0' AFTER `delete_date`;
+//============================================================
+
+-	script	MvPrank	-1,{
+OnInit:
+	//MvPIDs.
+	setarray .mobid[0],1511,1647,1785,1630,1399,1039,1874,2068,1272,1719,1046,1389,1112,1115,1957,1418,1871,1252,1768,1086,1688,1646,
+					1373,1147,1059,1150,1956,2022,1087,1190,1038,1157,1159,1502,1623,1650,1583,1708,1312,1751,1685,1648,1917,1658,
+					1885,1492,1086; // MvP Ids
+
+	end;
+
+OnNPCKillEvent:
+	//MvP Ranking:
+	for (set .@c, 0; .@c < getarraysize(.mobid); set .@c, .@c + 1)
+		if (killedrid == .mobid[.@c])
+			set .@s, 1; // If a MvP
+	
+	if (.@s)
+		query_sql "UPDATE `char` SET `mvp` = `mvp`+1 WHERE `char_id` = "+ getcharid(0);
+		
+	end;
+}
+
+prontera,149,177,4	script	MvP Ladder	966,{
+	// Configure the Ranker here:
+	set .@minGM,99;		// Minimum GM level to reset the ranking.
+	set .@maxrank,10; 	// Maximum ranks to display
+	
+	mes "[^ff0000MvP Ladder^000000]";
+	if(getgmlevel() >= .@minGM){
+		Mes "Welcome "+strcharinfo(0)+"!";
+		mes "What can I do for you?";
+		next;
+		mes "[^ff0000MvP Ladder^000000]";
+		if(select("Display Ranking:Reset Ranking") == 2){
+			mes "Do you really want to reset this ranking now?";
+			if(select("No:Yes") == 2){
+				query_sql "UPDATE `char` SET `mvp` = 0";
+				mes "Reset is done now!";
+			}
+			mes "Hope to see you again soon";
+			close;
+		}
+	}
+
+	query_sql "SELECT `name`,`mvp` FROM `char` ORDER BY `mvp` DESC LIMIT 0,"+.@maxrank, .@name$, .@mvp;
+	for(set .@i,0; .@i < .@maxrank; set .@i,.@i+1)
+		mes "#^FF0000" +(.@i + 1) +"^000000 [ ^0000FF"+ .@name$[.@i] +"^000000 ] - ^FF0000"+ .@mvp[.@i] +"^000000 MvPs.";
+		
+	close;
+}
