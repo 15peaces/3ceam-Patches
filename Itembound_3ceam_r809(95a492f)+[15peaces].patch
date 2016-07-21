@@ -1,0 +1,1538 @@
+ rewrite/conf/atcommand_athena.conf                 |  10 ++
+ rewrite/conf/battle/gm.conf                        |   4 +
+ rewrite/conf/msg_athena.conf                       |   7 ++
+ rewrite/doc/script_commands.txt                    |  71 ++++++++++-
+ rewrite/sql-files/3ceam_Itembound_Patch_r809+.sql  |   5 +
+ .../sql-files/3ceam_Itembound_log_Patch_r809+.sql  |   1 +
+ rewrite/sql-files/logs.sql                         |   1 +
+ rewrite/sql-files/main.sql                         |   5 +
+ rewrite/src/char_sql/char.c                        |  45 +++----
+ rewrite/src/char_sql/int_mail.c                    |  16 +--
+ rewrite/src/char_sql/int_storage.c                 | 140 +++++++++++++++++++--
+ rewrite/src/char_sql/inter.c                       |   2 +-
+ rewrite/src/common/mmo.h                           |   2 +
+ rewrite/src/map/atcommand.c                        |  39 +++++-
+ rewrite/src/map/battle.c                           |   1 +
+ rewrite/src/map/battle.h                           |   1 +
+ rewrite/src/map/buyingstore.c                      |   2 +-
+ rewrite/src/map/clif.c                             |  25 ++--
+ rewrite/src/map/guild.h                            |   2 +
+ rewrite/src/map/intif.c                            |  58 +++++++--
+ rewrite/src/map/intif.h                            |   1 +
+ rewrite/src/map/log.c                              |   6 +-
+ rewrite/src/map/mail.c                             |   3 +-
+ rewrite/src/map/party.c                            |   8 +-
+ rewrite/src/map/pc.c                               |  43 ++++++-
+ rewrite/src/map/pc.h                               |   4 +
+ rewrite/src/map/script.c                           |  98 +++++++++++++--
+ rewrite/src/map/script.h                           |   1 +
+ rewrite/src/map/storage.c                          |  13 +-
+ rewrite/src/map/storage.h                          |   1 +
+ rewrite/src/map/trade.c                            |   6 +
+ rewrite/src/map/vending.c                          |   1 +
+ 32 files changed, 534 insertions(+), 88 deletions(-)
+
+diff --git a/rewrite/conf/atcommand_athena.conf b/rewrite/conf/atcommand_athena.conf
+index 9e2d867..f4e84d1 100644
+--- a/rewrite/conf/atcommand_athena.conf
++++ b/rewrite/conf/atcommand_athena.conf
+@@ -526,6 +526,16 @@ item2: 60,60
+ // Deletes an item of your choosing, either Item ID or Name.
+ delitem: 60,60
+ 
++//@itembound <item name/ID> <amount> <bound_type> 
++//Creates the specified item and bounds it to the account. 
++//bound_type: 1 = Account, 2 = Guild, 3 = Party, 4 = Character 
++itembound: 60,60
++ 
++//@itembound2 <item name/ID> <quantity> <identify_flag> <refine> <attribute> <card1> <card2> <card3> <card4> <bound_type> 
++//Creates an item with the given parameters (the 'cards' can be any item) and bounds it to the account. 
++//identify_flag: 0 = unidentified, 1 = identified, attribute: 0 = not broken, 1 = broken, bound_type: 1 = Account, 2 = Guild, 3 = Party, 4 = Character  
++itembound2: 60,60 
++
+ // Kill another character without hitting them.
+ kill: 60,60
+ 
+diff --git a/rewrite/conf/battle/gm.conf b/rewrite/conf/battle/gm.conf
+index 7511eff..553b6b6 100644
+--- a/rewrite/conf/battle/gm.conf
++++ b/rewrite/conf/battle/gm.conf
+@@ -90,6 +90,10 @@ gm_cant_drop_min_lv: 1
+ //ie: Use Storage/Guild Storage, Drop Items, Use Vend, Trade items. 
+ gm_cant_drop_max_lv: 0
+ 
++// The minimum level for a GM to be able to ignore @getitembound permissions.
++// Set this to 0 to disable this bound-system. All bound-settings will be ignored then.
++bound_item_drop: 60
++
+ // Minimum GM level to see the hp of every player? (Default: 60)
+ // no/0 can be used to disable it.
+ disp_hpmeter: 0
+diff --git a/rewrite/conf/msg_athena.conf b/rewrite/conf/msg_athena.conf
+index 2c3dd38..e4e7c08 100644
+--- a/rewrite/conf/msg_athena.conf
++++ b/rewrite/conf/msg_athena.conf
+@@ -308,6 +308,13 @@
+ 289: The player is now killable.
+ 290: The player is no longer killable.
+ 291: Weather effects will dispell on warp/refresh
++//Item Bound System 
++293: This bounded item cannot be traded to that character. 
++294: This bounded item cannot be stored there. 
++295: Please enter an item name or ID (usage: @item <item name/ID> <quantity> <bound_type>). 
++296: Please enter all parameters (usage: @item2 <item name/ID> <quantity> 
++297:   <identify_flag> <refine> <attribute> <card1> <card2> <card3> <card4> <bound_type>). 
++298: Invalid bound type. Valid types are - 1:Account 2:Guild 3:Party 4:Character
+ // Guild Castles Number
+ // --------------------
+ //299: ?? Castles
+diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
+index db45581..88ff47f 100644
+--- a/rewrite/doc/script_commands.txt
++++ b/rewrite/doc/script_commands.txt
+@@ -4,7 +4,7 @@
+ //= A reference manual for the eAthena scripting language.
+ //= Commands are sorted depending on their functionality.
+ //===== Version ===========================================
+-//= 3.51.20130619
++//= 3.52.20160720
+ //=========================================================
+ //= 1.0 - First release, filled will as much info as I could
+ //=       remember or figure out, most likely there are errors,
+@@ -194,6 +194,8 @@
+ //= 3.51.20130619
+ //=       Added 'setdragon', 'checkdragon', 'setwug', 'checkwug', 
+ //=       'setwugrider', 'checkwugrider', 'setmadogear', 'checkmadogear'. [Rytech]
++//= 3.52.20140519
++//=       Added 'getitembound', '*getitembound2' [15peaces]
+ //=========================================================
+ 
+ This document is a reference manual for all the scripting commands and functions 
+@@ -4588,7 +4590,74 @@ Example(s):
+ //The invoked character will no longer automatically equip a falchion.
+ 	autoequip 1104,0;
+ 
++--------------------------------------- 
++  
++*getitembound <item id>,<amount>,<bound_type>{,<account ID>}; 
++*getitembound "<item name>",<amount>,<bound_type>{,<account ID>}; 
++
++This command will give an amount of specified items to the invoking character.  
++If an optional account ID is specified, and the target character is currently  
++online, items will be created in their inventory instead. If they are not  
++online, nothing will happen.  
++
++It works essentially the same as 'getitem', except that items created using 
++this command will bound the item to the player's account. Depending on the bound type issued, 
++the character may not be able to trade or store these items, however all bounded types 
++cannot be sold, vended, auctioned, or mailed. 
++	 
++Bound Types: 
++	1 - Account Bound 
++	2 - Guild Bound 
++	3 - Party Bound 
++	4 - Character Bound 
++ 
++--------------------------------------- 
++
++*getitembound2 <item id>,<amount>,<identify>,<refine>,<attribute>,<card1>,<card2>,<card3>,<card4>,<bound_type>{,<account ID>}; 
++*getitembound2 "<item name>",<amount>,<identify>,<refine>,<attribute>,<card1>,<card2>,<card3>,<card4>,<bound_type>{,<account ID>}; 
++
++This command will give an amount of specified items to the invoking character.  
++If an optional account ID is specified, and the target character is currently  
++online, items will be created in their inventory instead. If they are not  
++online, nothing will happen.  
++ 
++It works essentially the same as 'getitem2', except that items created using 
++this command will bound the item to the player's account. Depending on the bound type issued, 
++the character may not be able to trade or store these items, however all bounded types 
++cannot be sold, vended, auctioned, or mailed. 
++ 
++Bound Types: 
++	1 - Account Bound 
++	2 - Guild Bound 
++	3 - Party Bound 
++	4 - Character Bound 
++	
+ ---------------------------------------
++ 
++*countbound({<bound_type>}) 
++ 
++This function will return a number of bounded items on the character. 
++Optionally, you may count a specific type of bounded item on the character. 
++
++countbound will also build an array of items in the form of @bound_items. 
++Using countbound without a type counts all types of bounded items. 
++
++Available types are: 
++	1 - Account Bound 
++	2 - Guild Bound 
++	3 - Party Bound 
++	4 - Character Bound 
++ 
++Example: 
++	mes "[Bound Counter]"; 
++	mes "I see you currently have "+countbound+" bounded items."; 
++	next; 
++	mes "The list of bounded items include:"; 
++	for(set .@i, 0; .@i<getarraysize(@bound_items); set .@i,.@i+1) 
++		mes getitemname(@bound_items[.@i]); 
++	close; 
++	     
++--------------------------------------- 
+ 
+ *buyingstore <slots>;
+ 
+diff --git a/rewrite/sql-files/3ceam_Itembound_Patch_r809+.sql b/rewrite/sql-files/3ceam_Itembound_Patch_r809+.sql
+new file mode 100644
+index 0000000..6ee67f1
+--- /dev/null
++++ b/rewrite/sql-files/3ceam_Itembound_Patch_r809+.sql
+@@ -0,0 +1,5 @@
++ALTER TABLE `inventory` ADD COLUMN `bound` TINYINT(3) UNSIGNED NOT NULL DEFAULT '0' AFTER `expire_time`;
++ALTER TABLE `cart_inventory` ADD COLUMN `bound` TINYINT(3) UNSIGNED NOT NULL default '0' AFTER `expire_time`;
++ALTER TABLE `mail` ADD COLUMN `bound` TINYINT( 3 ) UNSIGNED NOT NULL DEFAULT '0' AFTER `card3`;
++ALTER TABLE `storage` ADD COLUMN `bound` TINYINT(3) UNSIGNED NOT NULL default '0' AFTER `expire_time`;
++ALTER TABLE `guild_storage` ADD COLUMN `bound` TINYINT(3) UNSIGNED NOT NULL default '0' AFTER `expire_time`;
+diff --git a/rewrite/sql-files/3ceam_Itembound_log_Patch_r809+.sql b/rewrite/sql-files/3ceam_Itembound_log_Patch_r809+.sql
+new file mode 100644
+index 0000000..7545e04
+--- /dev/null
++++ b/rewrite/sql-files/3ceam_Itembound_log_Patch_r809+.sql
+@@ -0,0 +1 @@
++ALTER TABLE `picklog` ADD COLUMN `bound` TINYINT( 3 ) UNSIGNED NOT NULL DEFAULT '0'; 
+diff --git a/rewrite/sql-files/logs.sql b/rewrite/sql-files/logs.sql
+index 6a69e3e..303dff4 100644
+--- a/rewrite/sql-files/logs.sql
++++ b/rewrite/sql-files/logs.sql
+@@ -18,6 +18,7 @@ CREATE TABLE `picklog` (
+   `card2` int(11) NOT NULL default '0',
+   `card3` int(11) NOT NULL default '0',
+   `map` varchar(11) NOT NULL default '',
++  `bound` tinyint(1) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`),
+   INDEX (`type`)
+ ) ENGINE=MyISAM AUTO_INCREMENT=1 ;
+diff --git a/rewrite/sql-files/main.sql b/rewrite/sql-files/main.sql
+index 6d30b78..d88b90e 100644
+--- a/rewrite/sql-files/main.sql
++++ b/rewrite/sql-files/main.sql
+@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `cart_inventory` (
+   `card2` smallint(11) NOT NULL default '0',
+   `card3` smallint(11) NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
++  `bound` tinyint(3) unsigned NOT NULL default '0', 
+   PRIMARY KEY  (`id`),
+   KEY `char_id` (`char_id`)
+ ) ENGINE=MyISAM;
+@@ -316,6 +317,7 @@ CREATE TABLE IF NOT EXISTS `guild_storage` (
+   `card2` smallint(11) NOT NULL default '0',
+   `card3` smallint(11) NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
++  `bound` tinyint(3) unsigned NOT NULL default '0', 
+   PRIMARY KEY  (`id`),
+   KEY `guild_id` (`guild_id`)
+ ) ENGINE=MyISAM;
+@@ -377,6 +379,7 @@ CREATE TABLE IF NOT EXISTS `inventory` (
+   `card2` smallint(11) NOT NULL default '0',
+   `card3` smallint(11) NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
++  `bound` tinyint(3) unsigned NOT NULL default '0', 
+   PRIMARY KEY  (`id`),
+   KEY `char_id` (`char_id`)
+ ) ENGINE=MyISAM;
+@@ -473,6 +476,7 @@ CREATE TABLE IF NOT EXISTS `mail` (
+   `card1` smallint(11) NOT NULL default '0',
+   `card2` smallint(11) NOT NULL default '0',
+   `card3` smallint(11) NOT NULL default '0',
++  `bound` tinyint(1) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`)
+ ) ENGINE=MyISAM;
+ 
+@@ -670,6 +674,7 @@ CREATE TABLE IF NOT EXISTS `storage` (
+   `card2` smallint(11) NOT NULL default '0',
+   `card3` smallint(11) NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
++  `bound` tinyint(3) unsigned NOT NULL default '0', 
+   PRIMARY KEY  (`id`),
+   KEY `account_id` (`account_id`)
+ ) ENGINE=MyISAM;
+diff --git a/rewrite/src/char_sql/char.c b/rewrite/src/char_sql/char.c
+index 9f6bf32..86eefdb 100644
+--- a/rewrite/src/char_sql/char.c
++++ b/rewrite/src/char_sql/char.c
+@@ -711,7 +711,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	// it significantly reduces cpu load on the database server.
+ 
+ 	StringBuf_Init(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`");
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `bound`"); 
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+ 		StringBuf_Printf(&buf, ", `card%d`", j);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `%s`='%d'", tablename, selectoption, id);
+@@ -734,8 +734,9 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,      &item.refine,      0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &item.attribute,   0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &item.expire_time, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 8, SQLDT_UINT,      &item.bound,       0, NULL, NULL);
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+-		SqlStmt_BindColumn(stmt, 8+j, SQLDT_SHORT, &item.card[j], 0, NULL, NULL);
++		SqlStmt_BindColumn(stmt, 9+j, SQLDT_SHORT, &item.card[j], 0, NULL, NULL);
+ 
+ 	// bit array indicating which inventory items have already been matched
+ 	flag = (bool*) aCallocA(max, sizeof(bool));
+@@ -757,19 +758,19 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 			) {	//They are the same item.
+ 				ARR_FIND( 0, MAX_SLOTS, j, items[i].card[j] != item.card[j] );
+ 				if( j == MAX_SLOTS &&
+-				    items[i].amount == item.amount &&
+-				    items[i].equip == item.equip &&
+-				    items[i].identify == item.identify &&
+-				    items[i].refine == item.refine &&
+-				    items[i].attribute == item.attribute &&
+-				    items[i].expire_time == item.expire_time )
++					items[i].amount == item.amount &&
++					items[i].equip == item.equip &&
++					items[i].identify == item.identify &&
++					items[i].refine == item.refine &&
++					items[i].expire_time == item.expire_time && 
++					items[i].bound == item.bound ) 
+ 				;	//Do nothing.
+ 				else
+ 				{
+ 					// update all fields.
+ 					StringBuf_Clear(&buf);
+-					StringBuf_Printf(&buf, "UPDATE `%s` SET `amount`='%d', `equip`='%d', `identify`='%d', `refine`='%d',`attribute`='%d', `expire_time`='%u'",
+-						tablename, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time);
++					StringBuf_Printf(&buf, "UPDATE `%s` SET `amount`='%d', `equip`='%d', `identify`='%d', `refine`='%d',`attribute`='%d', `expire_time`='%u', `bound`='%d'", 
++						tablename, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time, items[i].bound); 
+ 					for( j = 0; j < MAX_SLOTS; ++j )
+ 						StringBuf_Printf(&buf, ", `card%d`=%d", j, items[i].card[j]);
+ 					StringBuf_Printf(&buf, " WHERE `id`='%d' LIMIT 1", item.id);
+@@ -791,7 +792,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	SqlStmt_Free(stmt);
+ 
+ 	StringBuf_Clear(&buf);
+-	StringBuf_Printf(&buf, "INSERT INTO `%s`(`%s`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`", tablename, selectoption);
++	StringBuf_Printf(&buf, "INSERT INTO `%s`(`%s`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `bound`", tablename, selectoption); 
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+ 		StringBuf_Printf(&buf, ", `card%d`", j);
+ 	StringBuf_AppendStr(&buf, ") VALUES ");
+@@ -809,8 +810,8 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 		else
+ 			found = true;
+ 
+-		StringBuf_Printf(&buf, "('%d', '%d', '%d', '%d', '%d', '%d', '%d', '%u'",
+-			id, items[i].nameid, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time);
++		StringBuf_Printf(&buf, "('%d', '%d', '%d', '%d', '%d', '%d', '%d', '%u' ,'%d'",
++			id, items[i].nameid, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time, items[i].bound); 
+ 		for( j = 0; j < MAX_SLOTS; ++j )
+ 			StringBuf_Printf(&buf, ", '%d'", items[i].card[j]);
+ 		StringBuf_AppendStr(&buf, ")");
+@@ -1048,7 +1049,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	//read inventory
+ 	//`inventory` (`id`,`char_id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `card0`, `card1`, `card2`, `card3`)
+ 	StringBuf_Init(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`");
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `bound`");
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+ 		StringBuf_Printf(&buf, ", `card%d`", i);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `char_id`=? LIMIT %d", inventory_db, MAX_INVENTORY);
+@@ -1063,10 +1064,11 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,      &tmp_item.identify, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,      &tmp_item.refine, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &tmp_item.attribute, 0, NULL, NULL)
+-	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &tmp_item.expire_time, 0, NULL, NULL) )
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &tmp_item.expire_time, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 8, SQLDT_CHAR,      &tmp_item.bound, 0, NULL, NULL)) 
+ 		SqlStmt_ShowDebug(stmt);
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+-		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 8+i, SQLDT_SHORT, &tmp_item.card[i], 0, NULL, NULL) )
++		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 9+i, SQLDT_SHORT, &tmp_item.card[i], 0, NULL, NULL) )
+ 			SqlStmt_ShowDebug(stmt);
+ 
+ 	for( i = 0; i < MAX_INVENTORY && SQL_SUCCESS == SqlStmt_NextRow(stmt); ++i )
+@@ -1077,7 +1079,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	//read cart
+ 	//`cart_inventory` (`id`,`char_id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `card0`, `card1`, `card2`, `card3`)
+ 	StringBuf_Clear(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`");
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `bound`");
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+ 		StringBuf_Printf(&buf, ", `card%d`", j);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `char_id`=? LIMIT %d", cart_db, MAX_CART);
+@@ -1092,10 +1094,11 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,        &tmp_item.identify, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,        &tmp_item.refine, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,        &tmp_item.attribute, 0, NULL, NULL)
+-	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,        &tmp_item.expire_time, 0, NULL, NULL) )
+-		SqlStmt_ShowDebug(stmt);
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,        &tmp_item.expire_time, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 8, SQLDT_CHAR,        &tmp_item.bound, 0, NULL, NULL)) 
++	SqlStmt_ShowDebug(stmt);
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+-		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 8+i, SQLDT_SHORT, &tmp_item.card[i], 0, NULL, NULL) )
++		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 9+i, SQLDT_SHORT, &tmp_item.card[i], 0, NULL, NULL) )
+ 			SqlStmt_ShowDebug(stmt);
+ 
+ 	for( i = 0; i < MAX_CART && SQL_SUCCESS == SqlStmt_NextRow(stmt); ++i )
+@@ -2689,7 +2692,7 @@ int parse_frommap(int fd)
+ 				break;
+ 			}
+ 			//Check account only if this ain't final save. Final-save goes through because of the char-map reconnect
+-			if (RFIFOB(fd,12) || (
++			if (RFIFOB(fd,12) || RFIFOB(fd,13) || (
+ 				(character = (struct online_char_data*)idb_get(online_char_db, aid)) != NULL &&
+ 				character->char_id == cid))
+ 			{
+diff --git a/rewrite/src/char_sql/int_mail.c b/rewrite/src/char_sql/int_mail.c
+index b19b732..92eb472 100644
+--- a/rewrite/src/char_sql/int_mail.c
++++ b/rewrite/src/char_sql/int_mail.c
+@@ -29,7 +29,7 @@ static int mail_fromsql(int char_id, struct mail_data* md)
+ 
+ 	StringBuf_Init(&buf);
+ 	StringBuf_AppendStr(&buf, "SELECT `id`,`send_name`,`send_id`,`dest_name`,`dest_id`,`title`,`message`,`time`,`status`,"
+-		"`zeny`,`amount`,`nameid`,`refine`,`attribute`,`identify`");
++		"`zeny`,`amount`,`nameid`,`refine`,`attribute`,`identify`,`bound`");
+ 	for (i = 0; i < MAX_SLOTS; i++)
+ 		StringBuf_Printf(&buf, ",`card%d`", i);
+ 
+@@ -61,11 +61,12 @@ static int mail_fromsql(int char_id, struct mail_data* md)
+ 		Sql_GetData(sql_handle,12, &data, NULL); item->refine = atoi(data);
+ 		Sql_GetData(sql_handle,13, &data, NULL); item->attribute = atoi(data);
+ 		Sql_GetData(sql_handle,14, &data, NULL); item->identify = atoi(data);
++		Sql_GetData(sql_handle,15, &data, NULL); item->bound = atoi(data);
+ 		item->expire_time = 0;
+ 
+ 		for (j = 0; j < MAX_SLOTS; j++)
+ 		{
+-			Sql_GetData(sql_handle, 15 + j, &data, NULL);
++			Sql_GetData(sql_handle, 16 + j, &data, NULL);
+ 			item->card[j] = atoi(data);
+ 		}
+ 	}
+@@ -106,11 +107,11 @@ int mail_savemessage(struct mail_message* msg)
+ 
+ 	// build message save query
+ 	StringBuf_Init(&buf);
+-	StringBuf_Printf(&buf, "INSERT INTO `%s` (`send_name`, `send_id`, `dest_name`, `dest_id`, `title`, `message`, `time`, `status`, `zeny`, `amount`, `nameid`, `refine`, `attribute`, `identify`", mail_db);
++	StringBuf_Printf(&buf, "INSERT INTO `%s` (`send_name`, `send_id`, `dest_name`, `dest_id`, `title`, `message`, `time`, `status`, `zeny`, `amount`, `nameid`, `refine`, `attribute`, `identify`, `bound`", mail_db);
+ 	for (j = 0; j < MAX_SLOTS; j++)
+ 		StringBuf_Printf(&buf, ", `card%d`", j);
+-	StringBuf_Printf(&buf, ") VALUES (?, '%d', ?, '%d', ?, ?, '%lu', '%d', '%d', '%d', '%d', '%d', '%d', '%d'",
+-		msg->send_id, msg->dest_id, (unsigned long)msg->timestamp, msg->status, msg->zeny, msg->item.amount, msg->item.nameid, msg->item.refine, msg->item.attribute, msg->item.identify);
++	StringBuf_Printf(&buf, ") VALUES (?, '%d', ?, '%d', ?, ?, '%lu', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d'",
++		msg->send_id, msg->dest_id, (unsigned long)msg->timestamp, msg->status, msg->zeny, msg->item.amount, msg->item.nameid, msg->item.refine, msg->item.attribute, msg->item.identify, msg->item.bound);
+ 	for (j = 0; j < MAX_SLOTS; j++)
+ 		StringBuf_Printf(&buf, ", '%d'", msg->item.card[j]);
+ 	StringBuf_AppendStr(&buf, ")");
+@@ -144,7 +145,7 @@ static bool mail_loadmessage(int mail_id, struct mail_message* msg)
+ 
+ 	StringBuf_Init(&buf);
+ 	StringBuf_AppendStr(&buf, "SELECT `id`,`send_name`,`send_id`,`dest_name`,`dest_id`,`title`,`message`,`time`,`status`,"
+-		"`zeny`,`amount`,`nameid`,`refine`,`attribute`,`identify`");
++		"`zeny`,`amount`,`nameid`,`refine`,`attribute`,`identify`,`bound`");
+ 	for( j = 0; j < MAX_SLOTS; j++ )
+ 		StringBuf_Printf(&buf, ",`card%d`", j);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `id` = '%d'", mail_db, mail_id);
+@@ -176,11 +177,12 @@ static bool mail_loadmessage(int mail_id, struct mail_message* msg)
+ 		Sql_GetData(sql_handle,12, &data, NULL); msg->item.refine = atoi(data);
+ 		Sql_GetData(sql_handle,13, &data, NULL); msg->item.attribute = atoi(data);
+ 		Sql_GetData(sql_handle,14, &data, NULL); msg->item.identify = atoi(data);
++		Sql_GetData(sql_handle,15, &data, NULL); msg->item.bound = atoi(data);
+ 		msg->item.expire_time = 0;
+ 
+ 		for( j = 0; j < MAX_SLOTS; j++ )
+ 		{
+-			Sql_GetData(sql_handle,15 + j, &data, NULL);
++			Sql_GetData(sql_handle,16 + j, &data, NULL);
+ 			msg->item.card[j] = atoi(data);
+ 		}
+ 	}
+diff --git a/rewrite/src/char_sql/int_storage.c b/rewrite/src/char_sql/int_storage.c
+index 0719685..9e7d336 100644
+--- a/rewrite/src/char_sql/int_storage.c
++++ b/rewrite/src/char_sql/int_storage.c
+@@ -39,7 +39,7 @@ int storage_fromsql(int account_id, struct storage_data* p)
+ 
+ 	// storage {`account_id`/`id`/`nameid`/`amount`/`equip`/`identify`/`refine`/`attribute`/`card0`/`card1`/`card2`/`card3`}
+ 	StringBuf_Init(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`,`nameid`,`amount`,`equip`,`identify`,`refine`,`attribute`,`expire_time`");
++	StringBuf_AppendStr(&buf, "SELECT `id`,`nameid`,`amount`,`equip`,`identify`,`refine`,`attribute`,`expire_time`,`bound`");
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+ 		StringBuf_Printf(&buf, ",`card%d`", j);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `account_id`='%d' ORDER BY `nameid`", storage_db, account_id);
+@@ -60,9 +60,10 @@ int storage_fromsql(int account_id, struct storage_data* p)
+ 		Sql_GetData(sql_handle, 5, &data, NULL); item->refine = atoi(data);
+ 		Sql_GetData(sql_handle, 6, &data, NULL); item->attribute = atoi(data);
+ 		Sql_GetData(sql_handle, 7, &data, NULL); item->expire_time = (unsigned int)atoi(data);
++		Sql_GetData(sql_handle, 8, &data, NULL); item->bound = atoi(data);
+ 		for( j = 0; j < MAX_SLOTS; ++j )
+ 		{
+-			Sql_GetData(sql_handle, 8+j, &data, NULL); item->card[j] = atoi(data);
++			Sql_GetData(sql_handle, 9+j, &data, NULL); item->card[j] = atoi(data);
+ 		}
+ 	}
+ 	p->storage_amount = i;
+@@ -97,7 +98,7 @@ int guild_storage_fromsql(int guild_id, struct guild_storage* p)
+ 
+ 	// storage {`guild_id`/`id`/`nameid`/`amount`/`equip`/`identify`/`refine`/`attribute`/`card0`/`card1`/`card2`/`card3`}
+ 	StringBuf_Init(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`,`nameid`,`amount`,`equip`,`identify`,`refine`,`attribute`");
++	StringBuf_AppendStr(&buf, "SELECT `id`,`nameid`,`amount`,`equip`,`identify`,`refine`,`attribute`,`bound`");
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+ 		StringBuf_Printf(&buf, ",`card%d`", j);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `guild_id`='%d' ORDER BY `nameid`", guild_storage_db, guild_id);
+@@ -117,10 +118,11 @@ int guild_storage_fromsql(int guild_id, struct guild_storage* p)
+ 		Sql_GetData(sql_handle, 4, &data, NULL); item->identify = atoi(data);
+ 		Sql_GetData(sql_handle, 5, &data, NULL); item->refine = atoi(data);
+ 		Sql_GetData(sql_handle, 6, &data, NULL); item->attribute = atoi(data);
++		Sql_GetData(sql_handle, 7, &data, NULL); item->bound = atoi(data);
+ 		item->expire_time = 0;
+ 		for( j = 0; j < MAX_SLOTS; ++j )
+ 		{
+-			Sql_GetData(sql_handle, 7+j, &data, NULL); item->card[j] = atoi(data);
++			Sql_GetData(sql_handle, 8+j, &data, NULL); item->card[j] = atoi(data);
+ 		}
+ 	}
+ 	p->storage_amount = i;
+@@ -159,18 +161,19 @@ int inter_guild_storage_delete(int guild_id)
+ //---------------------------------------------------------
+ // packet from map server
+ 
+-int mapif_load_guild_storage(int fd,int account_id,int guild_id)
++int mapif_load_guild_storage(int fd,int account_id,int guild_id, char flag)
+ {
+ 	if( SQL_ERROR == Sql_Query(sql_handle, "SELECT `guild_id` FROM `%s` WHERE `guild_id`='%d'", guild_db, guild_id) )
+ 		Sql_ShowDebug(sql_handle);
+ 	else if( Sql_NumRows(sql_handle) > 0 )
+ 	{// guild exists
+-		WFIFOHEAD(fd, sizeof(struct guild_storage)+12);
++		WFIFOHEAD(fd, sizeof(struct guild_storage)+13);
+ 		WFIFOW(fd,0) = 0x3818;
+-		WFIFOW(fd,2) = sizeof(struct guild_storage)+12;
++		WFIFOW(fd,2) = sizeof(struct guild_storage)+13;
+ 		WFIFOL(fd,4) = account_id;
+ 		WFIFOL(fd,8) = guild_id;
+-		guild_storage_fromsql(guild_id, (struct guild_storage*)WFIFOP(fd,12));
++		WFIFOB(fd,12) = flag; //1 open storage, 0 don't open 
++		guild_storage_fromsql(guild_id, (struct guild_storage*)WFIFOP(fd,13));
+ 		WFIFOSET(fd, WFIFOW(fd,2));
+ 		return 0;
+ 	}
+@@ -201,7 +204,7 @@ int mapif_save_guild_storage_ack(int fd,int account_id,int guild_id,int fail)
+ int mapif_parse_LoadGuildStorage(int fd)
+ {
+ 	RFIFOHEAD(fd);
+-	mapif_load_guild_storage(fd,RFIFOL(fd,2),RFIFOL(fd,6));
++	mapif_load_guild_storage(fd,RFIFOL(fd,2),RFIFOL(fd,6),1);
+ 	return 0;
+ }
+ 
+@@ -235,6 +238,124 @@ int mapif_parse_SaveGuildStorage(int fd)
+ 	return 0;
+ }
+ 
++int mapif_itembound_ack(int fd, int aid, int guild_id) { 
++	WFIFOHEAD(fd,8); 
++	WFIFOW(fd,0) = 0x3856; 
++	WFIFOL(fd,2) = aid; 
++	WFIFOW(fd,6) = guild_id; 
++	WFIFOSET(fd,8); 
++	return 0; 
++} 
++
++//------------------------------------------------ 
++//Guild bound items pull for offline characters [Akinari] 
++//------------------------------------------------ 
++int mapif_parse_itembound_retrieve(int fd) { 
++	StringBuf buf; 
++	SqlStmt* stmt; 
++	struct item item; 
++	int j, i=0, s; 
++	bool found=false; 
++	struct item items[MAX_INVENTORY]; 
++	int char_id = RFIFOL(fd,2); 
++	int aid = RFIFOL(fd,6); 
++	int guild_id = RFIFOW(fd,10); 
++
++	StringBuf_Init(&buf); 
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `bound`"); 
++	for( j = 0; j < MAX_SLOTS; ++j ) 
++		StringBuf_Printf(&buf, ", `card%d`", j); 
++	StringBuf_Printf(&buf, " FROM `%s` WHERE `char_id`='%d'",inventory_db,char_id); 
++
++	stmt = SqlStmt_Malloc(sql_handle); 
++	if( SQL_ERROR == SqlStmt_PrepareStr(stmt, StringBuf_Value(&buf)) 
++	||  SQL_ERROR == SqlStmt_Execute(stmt) ) 
++	{ 
++		SqlStmt_ShowDebug(stmt); 
++		SqlStmt_Free(stmt); 
++		StringBuf_Destroy(&buf); 
++		return 1; 
++	} 
++
++	SqlStmt_BindColumn(stmt, 0, SQLDT_INT,       &item.id,          0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 1, SQLDT_SHORT,     &item.nameid,      0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 2, SQLDT_SHORT,     &item.amount,      0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 3, SQLDT_USHORT,    &item.equip,       0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,      &item.identify,    0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,      &item.refine,      0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &item.attribute,   0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &item.expire_time, 0, NULL, NULL); 
++	SqlStmt_BindColumn(stmt, 8, SQLDT_UINT,      &item.bound,       0, NULL, NULL); 
++	for( j = 0; j < MAX_SLOTS; ++j ) 
++		SqlStmt_BindColumn(stmt, 9+j, SQLDT_SHORT, &item.card[j], 0, NULL, NULL); 
++
++	while( SQL_SUCCESS == SqlStmt_NextRow(stmt) ) { 
++		if(item.bound == 2) { 
++			memcpy(&items[i],&item,sizeof(struct item)); 
++			i++; 
++		} 
++	} 
++     
++	if(!i) //No items found - No need to continue 
++		return 0; 
++
++	//First we delete the character's items 
++	StringBuf_Clear(&buf); 
++	StringBuf_Printf(&buf, "DELETE FROM `%s` WHERE",inventory_db); 
++	for(j=0; j<i; j++) { 
++		if( found ) 
++			StringBuf_AppendStr(&buf, " OR"); 
++		else 
++			found = true; 
++		StringBuf_Printf(&buf, " `id`=%d",items[j].id); 
++	} 
++
++	stmt = SqlStmt_Malloc(sql_handle); 
++	if( SQL_ERROR == SqlStmt_PrepareStr(stmt, StringBuf_Value(&buf)) 
++	||  SQL_ERROR == SqlStmt_Execute(stmt) ) 
++	{ 
++		SqlStmt_ShowDebug(stmt); 
++		SqlStmt_Free(stmt); 
++		StringBuf_Destroy(&buf); 
++		return 1; 
++	} 
++
++	//Now let's update the guild storage with those deleted items 
++	found = false; 
++	StringBuf_Clear(&buf); 
++	StringBuf_Printf(&buf, "INSERT INTO `%s` (`guild_id`, `nameid`, `amount`, `identify`, `refine`, `attribute`, `expire_time`, `bound`", guild_storage_db); 
++	for( j = 0; j < MAX_SLOTS; ++j ) 
++		StringBuf_Printf(&buf, ", `card%d`", j); 
++	StringBuf_AppendStr(&buf, ") VALUES "); 
++       
++	for( j = 0; j < i; ++j ) { 
++		if( found ) 
++			StringBuf_AppendStr(&buf, ","); 
++		else 
++			found = true; 
++
++		StringBuf_Printf(&buf, "('%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d'", 
++		guild_id, items[j].nameid, items[j].amount, items[j].identify, items[j].refine, items[j].attribute, items[j].expire_time, items[j].bound); 
++		for( s = 0; s < MAX_SLOTS; ++s ) 
++			StringBuf_Printf(&buf, ", '%d'", items[j].card[s]); 
++		StringBuf_AppendStr(&buf, ")"); 
++	} 
++
++	stmt = SqlStmt_Malloc(sql_handle); 
++	if( SQL_ERROR == SqlStmt_PrepareStr(stmt, StringBuf_Value(&buf)) 
++	||  SQL_ERROR == SqlStmt_Execute(stmt) ) 
++	{ 
++		SqlStmt_ShowDebug(stmt); 
++		SqlStmt_Free(stmt); 
++		StringBuf_Destroy(&buf); 
++		return 1; 
++	} 
++
++	//Finally reload storage and tell map we're done 
++	mapif_load_guild_storage(fd,aid,guild_id,0); 
++	mapif_itembound_ack(fd,aid,guild_id); 
++	return 0; 
++} 
+ 
+ int inter_storage_parse_frommap(int fd)
+ {
+@@ -242,6 +363,7 @@ int inter_storage_parse_frommap(int fd)
+ 	switch(RFIFOW(fd,0)){
+ 	case 0x3018: mapif_parse_LoadGuildStorage(fd); break;
+ 	case 0x3019: mapif_parse_SaveGuildStorage(fd); break;
++	case 0x3056: mapif_parse_itembound_retrieve(fd); break;
+ 	default:
+ 		return 0;
+ 	}
+diff --git a/rewrite/src/char_sql/inter.c b/rewrite/src/char_sql/inter.c
+index 70dafe3..4cf9c75 100644
+--- a/rewrite/src/char_sql/inter.c
++++ b/rewrite/src/char_sql/inter.c
+@@ -51,7 +51,7 @@ int inter_recv_packet_length[] = {
+ 	-1, 6,-1,14, 14,19, 6,-1, 14,14, 0, 0,  0, 0,  0, 0,	// 3020-
+ 	-1, 6,-1,-1, 55,19, 6,-1, 14,-1,-1,-1, 18,19,186,-1,	// 3030-
+ 	 5, 9, 0, 0,  0, 0, 0, 0,  7, 6,10,10, 10,-1,  0, 0,	// 3040-
+-	-1,-1,10,10,  0,-1, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0,	// 3050-  Auction System [Zephyrus]
++	-1,-1,10,10,  0,-1,12, 0,  0, 0, 0, 0,  0, 0,  0, 0,	// 3050-  Auction System [Zephyrus]
+ 	 6,-1, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0,	// 3060-  Quest system [Kevin] [Inkfish]
+ 	-1,10, 6,-1,  0, 0, 0, 0,  0, 0, 0, 0, -1,10,  6,-1,	// 3070-  Mercenary packets [Zephyrus], Elemental packets [pakpil]
+ 	48,14,-1, 6,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0,	// 3080-
+diff --git a/rewrite/src/common/mmo.h b/rewrite/src/common/mmo.h
+index 5e8d266..a07c1e7 100644
+--- a/rewrite/src/common/mmo.h
++++ b/rewrite/src/common/mmo.h
+@@ -240,6 +240,7 @@ struct item {
+ 	char attribute;
+ 	short card[MAX_SLOTS];
+ 	unsigned int expire_time;
++	char bound;
+ };
+ 
+ struct point {
+@@ -285,6 +286,7 @@ struct guild_storage {
+ 	short storage_status;
+ 	short storage_amount;
+ 	struct item items[MAX_GUILD_STORAGE];
++	unsigned short lock;
+ };
+ 
+ struct s_pet {
+diff --git a/rewrite/src/map/atcommand.c b/rewrite/src/map/atcommand.c
+index 0e8a58c..f85a1b3 100644
+--- a/rewrite/src/map/atcommand.c
++++ b/rewrite/src/map/atcommand.c
+@@ -1675,11 +1675,12 @@ ACMD_FUNC(heal)
+ 
+ /*==========================================
+  * @item command (usage: @item <name/id_of_item> <quantity>) (modified by [Yor] for pet_egg)
++ * @itembound command (usage: @itembound <name/id_of_item> <quantity> <bound_type>) 
+  *------------------------------------------*/
+ ACMD_FUNC(item)
+ {
+ 	char item_name[100];
+-	int number = 0, item_id, flag;
++	int number = 0, item_id, flag = 0, bound = 0;
+ 	struct item item_tmp;
+ 	struct item_data *item_data;
+ 	int get_count, i;
+@@ -1687,9 +1688,15 @@ ACMD_FUNC(item)
+ 
+ 	memset(item_name, '\0', sizeof(item_name));
+ 
+-	if (!message || !*message || (
+-		sscanf(message, "\"%99[^\"]\" %d", item_name, &number) < 1 &&
+-		sscanf(message, "%99s %d", item_name, &number) < 1
++	if (!strcmpi(command+1,"itembound") && (!message || !*message || ( 
++		sscanf(message, "\"%99[^\"]\" %d %d", item_name, &number, &bound) < 2 &&  
++		sscanf(message, "%99s %d %d", item_name, &number, &bound) < 2  
++	))) { 
++		clif_displaymessage(fd, msg_txt(295)); // Please enter an item name or ID (usage: @item <item name/ID> <quantity> <bound_type>). 
++		return -1; 
++	} else if (!message || !*message || ( 
++		sscanf(message, "\"%99[^\"]\" %d", item_name, &number) < 1 &&  
++		 sscanf(message, "%99s %d", item_name, &number) < 1
+ 	)) {
+ 		clif_displaymessage(fd, "Please, enter an item name/id (usage: @item <item name or ID> [quantity]).");
+ 		return -1;
+@@ -1705,6 +1712,11 @@ ACMD_FUNC(item)
+ 		return -1;
+ 	}
+ 
++	if( bound < 0 || bound > 3 ) { 
++		clif_displaymessage(fd, msg_txt(298)); // Invalid bound type 
++		return -1; 
++	}
++
+ 	item_id = item_data->nameid;
+ 	get_count = number;
+ 	//Check if it's stackable.
+@@ -1717,6 +1729,7 @@ ACMD_FUNC(item)
+ 			memset(&item_tmp, 0, sizeof(item_tmp));
+ 			item_tmp.nameid = item_id;
+ 			item_tmp.identify = 1;
++			item_tmp.bound = bound;
+ 
+ 			if ((flag = pc_additem(sd, &item_tmp, get_count)))
+ 				clif_additem(sd, 0, 0, flag);
+@@ -1739,7 +1752,7 @@ ACMD_FUNC(item2)
+ 	struct item item_tmp;
+ 	struct item_data *item_data;
+ 	char item_name[100];
+-	int item_id, number = 0;
++	int item_id, number = 0, bound = 0;
+ 	int identify = 0, refine = 0, attr = 0;
+ 	int c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+ 	int flag;
+@@ -1748,7 +1761,13 @@ ACMD_FUNC(item2)
+ 
+ 	memset(item_name, '\0', sizeof(item_name));
+ 
+-	if (!message || !*message || (
++	if (!strcmpi(command+1,"itembound2") && (!message || !*message || ( 
++		sscanf(message, "\"%99[^\"]\" %d %d %d %d %d %d %d %d %d", item_name, &number, &identify, &refine, &attr, &c1, &c2, &c3, &c4, &bound) < 10 && 
++		sscanf(message, "%99s %d %d %d %d %d %d %d %d %d", item_name, &number, &identify, &refine, &attr, &c1, &c2, &c3, &c4, &bound) < 10 ))) { 
++		clif_displaymessage(fd, msg_txt(296)); // Please enter all parameters (usage: @item2 <item name/ID> <quantity> 
++		clif_displaymessage(fd, msg_txt(297)); //   <identify_flag> <refine> <attribute> <card1> <card2> <card3> <card4> <bound_type>). 
++		return -1; 
++	} else if ( !message || !*message || (
+ 		sscanf(message, "\"%99[^\"]\" %d %d %d %d %d %d %d %d", item_name, &number, &identify, &refine, &attr, &c1, &c2, &c3, &c4) < 9 &&
+ 		sscanf(message, "%99s %d %d %d %d %d %d %d %d", item_name, &number, &identify, &refine, &attr, &c1, &c2, &c3, &c4) < 9
+ 	)) {
+@@ -1760,6 +1779,11 @@ ACMD_FUNC(item2)
+ 	if (number <= 0)
+ 		number = 1;
+ 
++	if( bound < 0 || bound > 3 ) { 
++		clif_displaymessage(fd, msg_txt(298)); // Invalid bound type 
++		return -1; 
++	} 
++
+ 	item_id = 0;
+ 	if ((item_data = itemdb_searchname(item_name)) != NULL ||
+ 	    (item_data = itemdb_exists(atoi(item_name))) != NULL)
+@@ -1794,6 +1818,7 @@ ACMD_FUNC(item2)
+ 			item_tmp.card[1] = c2;
+ 			item_tmp.card[2] = c3;
+ 			item_tmp.card[3] = c4;
++			item_tmp.bound = bound;
+ 			if ((flag = pc_additem(sd, &item_tmp, get_count)))
+ 				clif_additem(sd, 0, 0, flag);
+ 		}
+@@ -9199,7 +9224,9 @@ AtCommandInfo atcommand_info[] = {
+ 	{ "kamic",             40,40,     atcommand_kami },
+ 	{ "heal",              40,60,     atcommand_heal },
+ 	{ "item",              60,60,     atcommand_item },
++	{ "itembound",         60,60,     atcommand_item },
+ 	{ "item2",             60,60,     atcommand_item2 },
++	{ "itembound2",        60,60,     atcommand_item2 },
+ 	{ "itemreset",         40,40,     atcommand_itemreset },
+ 	{ "blvl",              60,60,     atcommand_baselevelup },
+ 	{ "lvup",              60,60,     atcommand_baselevelup },
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index 6825284..9f85ada 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -5868,6 +5868,7 @@ static const struct _battle_data {
+ 	{ "castle_defense_rate",                &battle_config.castle_defense_rate,             100,    0,      100,            },
+ 	{ "gm_cant_drop_min_lv",                &battle_config.gm_cant_drop_min_lv,             1,      0,      100,            },
+ 	{ "gm_cant_drop_max_lv",                &battle_config.gm_cant_drop_max_lv,             0,      0,      100,            },
++	{ "bound_item_drop",                    &battle_config.bound_item_drop,                 0,      0,      100,            },
+ 	{ "disp_hpmeter",                       &battle_config.disp_hpmeter,                    0,      0,      100,            },
+ 	{ "bone_drop",                          &battle_config.bone_drop,                       0,      0,      2,              },
+ 	{ "buyer_name",                         &battle_config.buyer_name,                      1,      0,      1,              },
+diff --git a/rewrite/src/map/battle.h b/rewrite/src/map/battle.h
+index cd3bc00..14dd9b2 100644
+--- a/rewrite/src/map/battle.h
++++ b/rewrite/src/map/battle.h
+@@ -345,6 +345,7 @@ extern struct Battle_Config
+ 	int sp_rate;
+ 	int gm_cant_drop_min_lv;
+ 	int gm_cant_drop_max_lv;
++	int bound_item_drop;
+ 	int disp_hpmeter;
+ 	int bone_drop;
+ 	int buyer_name;
+diff --git a/rewrite/src/map/buyingstore.c b/rewrite/src/map/buyingstore.c
+index a217910..24925a8 100644
+--- a/rewrite/src/map/buyingstore.c
++++ b/rewrite/src/map/buyingstore.c
+@@ -300,7 +300,7 @@ void buyingstore_trade(struct map_session_data* sd, int account_id, unsigned int
+ 			return;
+ 		}
+ 
+-		if( sd->status.inventory[index].expire_time || !itemdb_cantrade(&sd->status.inventory[index], pc_isGM(sd), pc_isGM(pl_sd)) || memcmp(sd->status.inventory[index].card, buyingstore_blankslots, sizeof(buyingstore_blankslots)) )
++		if( sd->status.inventory[index].expire_time || (sd->status.inventory[index].bound && !pc_can_give_bounded_items(sd->gmlevel)) || !itemdb_cantrade(&sd->status.inventory[index], pc_isGM(sd), pc_isGM(pl_sd)) || memcmp(sd->status.inventory[index].card, buyingstore_blankslots, sizeof(buyingstore_blankslots)) )
+ 		{// non-tradable item
+ 			clif_buyingstore_trade_failed_seller(sd, BUYINGSTORE_TRADE_SELLER_FAILED, nameid);
+ 			return;
+diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
+index b2f75dc..611308d 100644
+--- a/rewrite/src/map/clif.c
++++ b/rewrite/src/map/clif.c
+@@ -1945,6 +1945,12 @@ int clif_selllist(struct map_session_data *sd)
+ 			if( sd->status.inventory[i].expire_time )
+ 				continue; // Cannot Sell Rental Items
+ 
++			if( sd->status.inventory[i].expire_time || (sd->status.inventory[i].bound && !pc_can_give_bounded_items(sd->gmlevel)) ) 
++				continue; // Cannot Sell Rental Items or Account Bounded Items 
++	 
++			if( sd->status.inventory[i].bound && !pc_can_give_bounded_items(sd->gmlevel)) 
++				continue; // Don't allow sale of bound items
++
+ 			val=sd->inventory_data[i]->value_sell;
+ 			if( val < 0 )
+ 				continue;
+@@ -2333,7 +2339,7 @@ int clif_additem(struct map_session_data *sd, int n, int amount, int fail)
+ 		WFIFOB(fd,22+offset)=fail;
+ #if PACKETVER >= 20071002
+ 		WFIFOL(fd,23+offset)=0;
+-		WFIFOW(fd,27+offset)=0;
++		WFIFOW(fd,27+offset)=0; //HireExpireDate
+ #if PACKETVER >= 20150513
+ 		clif_add_random_options(WFIFOP(fd,31), &sd->status.inventory[n]);
+ #endif
+@@ -2364,7 +2370,7 @@ int clif_additem(struct map_session_data *sd, int n, int amount, int fail)
+ 		WFIFOB(fd,22+offset)=fail;
+ #if PACKETVER >= 20071002
+ 		WFIFOL(fd,23+offset)=sd->status.inventory[n].expire_time;
+-		WFIFOW(fd,27+offset)=0;
++		WFIFOW(fd,27+offset)=(sd->status.inventory[n].bound && !itemdb_isstackable(sd->status.inventory[n].nameid)) ? 2 : 0; 
+ #endif
+ #if PACKETVER >= 20150513
+ 		clif_add_random_options(WFIFOP(fd,31), &sd->status.inventory[n]);
+@@ -2623,7 +2629,7 @@ void clif_inventorylist_v5(struct map_session_data *sd)
+ 			clif_item_sub_v5(bufe, ne*se+6, &sd->status.inventory[i], sd->inventory_data[i], pc_equippoint(sd,i));
+ 			clif_addcards(WBUFP(bufe, ne*se+18), &sd->status.inventory[i]);// EQUIPSLOTINFO slot
+ 			WBUFL(bufe,ne*se+26)=sd->status.inventory[i].expire_time;// HireExpireDate
+-			WBUFW(bufe,ne*se+30)=0;// bindOnEquipType
++			WBUFW(bufe,ne*se+30)=sd->status.inventory[i].bound ? 2 : 0;// bindOnEquipType
+ 			if (sd->inventory_data[i]->equip&EQP_VISIBLE)
+ 				WBUFW(bufe,ne*se+32)= sd->inventory_data[i]->look;// wItemSpriteNumber
+ 			else
+@@ -2752,7 +2758,7 @@ void clif_equiplist_v5(struct map_session_data *sd)
+ 		clif_item_sub_v5(buf, n*cmd+6, &sd->status.inventory[i], sd->inventory_data[i], pc_equippoint(sd,i));
+ 		clif_addcards(WBUFP(buf, n*cmd+18), &sd->status.inventory[i]);// EQUIPSLOTINFO slot
+ 		WBUFL(buf,n*cmd+26)=sd->status.inventory[i].expire_time;// HireExpireDate
+-		WBUFW(buf,n*cmd+30)=0;// bindOnEquipType
++		WBUFW(buf,n*cmd+30)=sd->status.inventory[i].bound ? 2 : 0;// bindOnEquipType
+ 		if (sd->inventory_data[i]->equip&EQP_VISIBLE)
+ 			WBUFW(buf,n*cmd+32)= sd->inventory_data[i]->look;// wItemSpriteNumber
+ 		else
+@@ -2890,7 +2896,7 @@ void clif_storagelist_v5(struct map_session_data* sd, struct item* items, int it
+ 			clif_item_sub_v5(bufe, ne*cmd+30, &items[i], id, id->equip);
+ 			clif_addcards(WBUFP(bufe, ne*cmd+42), &items[i]);// EQUIPSLOTINFO slot
+ 			WBUFL(bufe,ne*cmd+50)=items[i].expire_time;// HireExpireDate
+-			WBUFW(bufe,ne*cmd+54)=0;// bindOnEquipType
++			WBUFW(bufe,ne*cmd+54)=items[i].bound ? 2 : 0;// bindOnEquipType
+ 			WBUFW(bufe,ne*cmd+56)=0;// wItemSpriteNumber
+ #if PACKETVER >= 20150513
+ 				WBUFB(bufe,ne*cmd+58)=0;// nRandomOptionCnt
+@@ -3046,7 +3052,7 @@ void clif_cartlist_v5(struct map_session_data *sd)
+ 			clif_item_sub_v5(bufe, ne*cmd+6, &sd->status.cart[i], id, id->equip);
+ 			clif_addcards(WBUFP(bufe, ne*cmd+18), &sd->status.cart[i]);// EQUIPSLOTINFO slot
+ 			WBUFL(bufe,ne*cmd+26)=sd->status.cart[i].expire_time;// HireExpireDate
+-			WBUFW(bufe,ne*cmd+30)=0;// bindOnEquipType
++			WBUFW(bufe,ne*cmd+30)=sd->status.cart[i].bound ? 2 : 0;// bindOnEquipType
+ 			WBUFW(bufe,ne*cmd+32)=0;// wItemSpriteNumber
+ #if PACKETVER >= 20150513
+ 				WBUFB(bufe,ne*cmd+34)=0;// nRandomOptionCnt
+@@ -9900,7 +9906,7 @@ void clif_viewequip_ack_v5(struct map_session_data* sd, struct map_session_data*
+ 		clif_item_sub_v5(WBUFP(buf,0), n*s+47, &tsd->status.inventory[i], tsd->inventory_data[i], pc_equippoint(tsd, i));
+ 		clif_addcards(WBUFP(buf, n*s+59), &tsd->status.inventory[i]);// EQUIPSLOTINFO slot
+ 		WBUFL(buf, n*s+67) = tsd->status.inventory[i].expire_time;// HireExpireDate
+-		WBUFW(buf, n*s+71) = 0;// bindOnEquipType
++		WBUFW(buf, n*s+71) = tsd->status.inventory[i].bound ? 2 : 0;// bindOnEquipType
+ 		if (tsd->inventory_data[i]->equip&EQP_VISIBLE)
+ 			WBUFW(buf, n*s+73) = tsd->inventory_data[i]->look;// wItemSpriteNumber
+ 		else
+@@ -15204,6 +15210,11 @@ void clif_parse_Auction_register(int fd, struct map_session_data *sd)
+ 	}
+ 
+ 	// Auction checks...
++	if( sd->status.inventory[sd->auction.index].bound && !pc_can_give_bounded_items(sd->gmlevel) ) { 
++		clif_displaymessage(sd->fd, msg_txt(293)); 
++		clif_Auction_message(fd, 2); // The auction has been canceled 
++		return; 
++	} 
+ 	if( sd->status.zeny < (auction.hours * battle_config.auction_feeperhour) )
+ 	{
+ 		clif_Auction_message(fd, 5); // You do not have enough zeny to pay the Auction Fee.
+diff --git a/rewrite/src/map/guild.h b/rewrite/src/map/guild.h
+index c6b3806..bf026bd 100644
+--- a/rewrite/src/map/guild.h
++++ b/rewrite/src/map/guild.h
+@@ -103,6 +103,8 @@ int guild_agit_end(void);
+ int guild_agit2_start(void);
+ int guild_agit2_end(void);
+ 
++void guild_retrieveitembound(int char_id,int aid,int guild_id);
++
+ void do_final_guild(void);
+ 
+ #endif /* _GUILD_H_ */
+diff --git a/rewrite/src/map/intif.c b/rewrite/src/map/intif.c
+index fd82ca3..6ea8a99 100644
+--- a/rewrite/src/map/intif.c
++++ b/rewrite/src/map/intif.c
+@@ -38,7 +38,7 @@ static const int packet_len_table[]={
+ 	39,-1,15,15, 14,19, 7,-1,  0, 0, 0, 0,  0, 0,  0, 0, //0x3820
+ 	10,-1,15, 0, 79,19, 7,-1,  0,-1,-1,-1, 14,67,186,-1, //0x3830
+ 	 9, 9,-1,14,  0, 0, 0, 0, -1,74,-1,11, 11,-1,  0, 0, //0x3840
+-	-1,-1, 7, 7,  7,11, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, //0x3850  Auctions [Zephyrus]
++	-1,-1, 7, 7,  7,11, 8, 0,  0, 0, 0, 0,  0, 0,  0, 0, //0x3850  Auctions [Zephyrus] itembound[Akinari]
+ 	-1, 7, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, //0x3860  Quests [Kevin] [Inkfish]
+ 	-1, 3, 3, 0,  0, 0, 0, 0,  0, 0, 0, 0, -1, 3,  3, 0, //0x3870  Mercenaries [Zephyrus] Elementals [pakpil]
+ 	11,-1, 7, 3,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0,  0, 0, //0x3880
+@@ -954,38 +954,43 @@ int intif_parse_LoadGuildStorage(int fd)
+ {
+ 	struct guild_storage *gstor;
+ 	struct map_session_data *sd;
+-	int guild_id;
++	int guild_id, flag;
+ 	
+ 	guild_id = RFIFOL(fd,8);
++	flag = RFIFOL(fd,12);
+ 	if(guild_id <= 0)
+ 		return 1;
+ 	sd=map_id2sd( RFIFOL(fd,4) );
+-	if(sd==NULL){
+-		ShowError("intif_parse_LoadGuildStorage: user not found %d\n",RFIFOL(fd,4));
+-		return 1;
+-	}
++	if( flag ){ //If flag != 0, we attach a player and open the storage 
++		if(sd==NULL){ 
++			ShowError("intif_parse_LoadGuildStorage: user not found %d\n",RFIFOL(fd,4)); 
++			return 1;
++		}
++	} 
+ 	gstor=guild2storage(guild_id);
+ 	if(!gstor) {
+ 		ShowWarning("intif_parse_LoadGuildStorage: error guild_id %d not exist\n",guild_id);
+ 		return 1;
+ 	}
+ 	if (gstor->storage_status == 1) { // Already open.. lets ignore this update
+-		ShowWarning("intif_parse_LoadGuildStorage: storage received for a client already open (User %d:%d)\n", sd->status.account_id, sd->status.char_id);
++		ShowWarning("intif_parse_LoadGuildStorage: storage received for a client already open (User %d:%d)\n", flag?sd->status.account_id:1, flag?sd->status.char_id:1); 
+ 		return 1;
+ 	}
+ 	if (gstor->dirty) { // Already have storage, and it has been modified and not saved yet! Exploit! [Skotlex]
+-		ShowWarning("intif_parse_LoadGuildStorage: received storage for an already modified non-saved storage! (User %d:%d)\n", sd->status.account_id, sd->status.char_id);
++		ShowWarning("intif_parse_LoadGuildStorage: received storage for an already modified non-saved storage! (User %d:%d)\n", flag?sd->status.account_id:1, flag?sd->status.char_id:1); 
+ 		return 1;
+ 	}
+-	if( RFIFOW(fd,2)-12 != sizeof(struct guild_storage) ){
+-		ShowError("intif_parse_LoadGuildStorage: data size error %d %d\n",RFIFOW(fd,2)-12 , sizeof(struct guild_storage));
++	if( RFIFOW(fd,2)-13 != sizeof(struct guild_storage) ){
++		ShowError("intif_parse_LoadGuildStorage: data size error %d %d\n",RFIFOW(fd,2)-13 , sizeof(struct guild_storage));
+ 		gstor->storage_status = 0;
+ 		return 1;
+ 	}
+ 	if(battle_config.save_log)
+ 		ShowInfo("intif_open_guild_storage: %d\n",RFIFOL(fd,4) );
+-	memcpy(gstor,RFIFOP(fd,12),sizeof(struct guild_storage));
+-	storage_guild_storageopen(sd);
++	memcpy(gstor,RFIFOP(fd,13),sizeof(struct guild_storage)); 
++	if( flag ) 
++		storage_guild_storageopen(sd); 
++
+ 	return 0;
+ }
+ int intif_parse_SaveGuildStorage(int fd)
+@@ -2070,6 +2075,31 @@ int intif_parse_elemental_saved(int fd)
+ 	return 0;
+ }
+ 
++/*========================================== 
++* Item Bound System 
++*------------------------------------------*/ 
++
++void intif_itembound_req(int char_id,int aid,int guild_id) { 
++	struct guild_storage *gstor = guild2storage2(guild_id); 
++	WFIFOHEAD(inter_fd,12); 
++	WFIFOW(inter_fd,0) = 0x3056; 
++	WFIFOL(inter_fd,2) = char_id; 
++	WFIFOL(inter_fd,6) = aid; 
++	WFIFOW(inter_fd,10) = guild_id; 
++	WFIFOSET(inter_fd,12); 
++	if(gstor) 
++		gstor->lock = 1; //Lock for retrieval process 
++} 
++ 
++//3856 
++void intif_parse_itembound_ack(int fd) { 
++	struct guild_storage *gstor; 
++	int guild_id = RFIFOW(char_fd,6); 
++
++	gstor = guild2storage2(guild_id); 
++	if(gstor) gstor->lock = 0; //Unlock now that operation is completed 
++}
++
+ //-----------------------------------------------------------------
+ // inter serverからの通信
+ // エラーがあれば0(false)を返すこと
+@@ -2157,6 +2187,10 @@ int intif_parse(int fd)
+ 	case 0x3854:	intif_parse_Auction_message(fd); break;
+ 	case 0x3855:	intif_parse_Auction_bid(fd); break;
+ #endif
++
++//Bound items 
++	case 0x3856:	intif_parse_itembound_ack(fd); break;
++
+ // Mercenary System
+ 	case 0x3870:	intif_parse_mercenary_received(fd); break;
+ 	case 0x3871:	intif_parse_mercenary_deleted(fd); break;
+diff --git a/rewrite/src/map/intif.h b/rewrite/src/map/intif.h
+index 798ecb2..268b669 100644
+--- a/rewrite/src/map/intif.h
++++ b/rewrite/src/map/intif.h
+@@ -59,6 +59,7 @@ int intif_guild_notice(int guild_id, const char *mes1, const char *mes2);
+ int intif_guild_emblem(int guild_id, int len, const char *data);
+ int intif_guild_castle_dataload(int castle_id, int index);
+ int intif_guild_castle_datasave(int castle_id, int index, int value);
++void intif_itembound_req(int char_id, int aid, int guild_id);
+ 
+ int intif_create_pet(int account_id, int char_id, short pet_type, short pet_lv, short pet_egg_id,
+                      short pet_equip, short intimate, short hungry, char rename_flag, char incuvate, char *pet_name);
+diff --git a/rewrite/src/map/log.c b/rewrite/src/map/log.c
+index 72cfe46..f210d88 100644
+--- a/rewrite/src/map/log.c
++++ b/rewrite/src/map/log.c
+@@ -114,8 +114,8 @@ int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int a
+ 				return 0;
+ 			}
+ 		} else { //We log Extended item
+-			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `refine`, `card0`, `card1`, `card2`, `card3`, `map`) VALUES (NOW(), '%d', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%s')",
+-				log_config.log_pick_db, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex)) )
++			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `refine`, `card0`, `card1`, `card2`, `card3`, `map`, `bound`) VALUES (NOW(), '%d', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%s', '%d')",
++				log_config.log_pick_db, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex), itm->bound) )
+ 			{
+ 				Sql_ShowDebug(logmysql_handle);
+ 				return 0;
+@@ -135,7 +135,7 @@ int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int a
+ 		if( itm == NULL ) { //We log common item
+ 			fprintf(logfp,"%s - %d\t%s\t%d,%d,%s\n", timestring, sd->status.char_id, type, nameid, amount, mapindex_id2name(sd->mapindex));
+ 		} else { //We log Extended item
+-			fprintf(logfp,"%s - %d\t%s\t%d,%d,%d,%d,%d,%d,%d,%s\n", timestring, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex));
++			fprintf(logfp,"%s - %d\t%s\t%d,%d,%d,%d,%d,%d,%d,%s,%d\n", timestring, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex), itm->bound);
+ 		}
+ 		fclose(logfp);
+ 	}
+diff --git a/rewrite/src/map/mail.c b/rewrite/src/map/mail.c
+index 59afa04..c96594a 100644
+--- a/rewrite/src/map/mail.c
++++ b/rewrite/src/map/mail.c
+@@ -90,7 +90,8 @@ unsigned char mail_setitem(struct map_session_data *sd, int idx, int amount)
+ 			return 1;
+ 		if( amount < 0 || amount > sd->status.inventory[idx].amount )
+ 			return 1;
+-		if( !pc_candrop(sd, &sd->status.inventory[idx]) )
++		if( !pc_candrop(sd, &sd->status.inventory[idx])  || sd->status.inventory[idx].expire_time  
++			|| (sd->status.inventory[idx].bound && !pc_can_give_bounded_items(sd->gmlevel)) ) 
+ 			return 1;
+ 
+ 		sd->mail.index = idx;
+diff --git a/rewrite/src/map/party.c b/rewrite/src/map/party.c
+index 6021a17..d79304e 100644
+--- a/rewrite/src/map/party.c
++++ b/rewrite/src/map/party.c
+@@ -547,8 +547,12 @@ int party_member_withdraw(int party_id, int account_id, int char_id)
+ 		}
+ 	}
+ 
+-	if( sd && sd->status.party_id == party_id && sd->status.char_id == char_id )
+-	{
++	if( sd && sd->status.party_id == party_id && sd->status.char_id == char_id ) { 
++		int idxlist[MAX_INVENTORY]; //or malloc to reduce consumtion 
++		int j,i; 
++		j = pc_bound_chk(sd,3,idxlist); 
++		for(i=0;i<j;i++) 
++			pc_delitem(sd,idxlist[i],sd->status.inventory[idxlist[i]].amount,0,1);
+ 		sd->status.party_id = 0;
+ 		clif_charnameupdate(sd); //Update name display [Skotlex]
+ 		//TODO: hp bars should be cleared too
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index 871d094..8e3d52b 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -767,6 +767,13 @@ bool pc_can_give_items(int level)
+ }
+ 
+ /*==========================================
++ * Determines if player can give / drop / trade / vend bounded items 
++ *------------------------------------------*/
++bool pc_can_give_bounded_items(int level) { 
++	return( level > battle_config.bound_item_drop); 
++} 
++
++/*==========================================
+  * prepares character for saving.
+  *------------------------------------------*/
+ int pc_makesavestatus(struct map_session_data *sd)
+@@ -1171,7 +1178,8 @@ int pc_isequip(struct map_session_data *sd,int n)
+  *------------------------------------------*/
+ bool pc_authok(struct map_session_data *sd, int login_id2, time_t expiration_time, int gmlevel, struct mmo_charstatus *st)
+ {
+-	int i;
++	int i, j; 
++	int idxlist[MAX_INVENTORY]; 
+ 	unsigned long tick = gettick();
+ 	uint32 ip = session[sd->fd]->client_addr;
+ 
+@@ -1340,6 +1348,12 @@ bool pc_authok(struct map_session_data *sd, int login_id2, time_t expiration_tim
+ 		clif_wis_message(sd->fd, wisp_server_name, tmpstr, strlen(tmpstr)+1);
+ 	}
+ 
++	// Party bound item check 
++	if(sd->status.party_id == 0 && (j = pc_bound_chk(sd,3,idxlist))) { // Party was deleted while character offline 
++		for(i=0;i<j;i++) 
++		pc_delitem(sd,idxlist[i],sd->status.inventory[idxlist[i]].amount,0,1); 
++	}
++
+ 	// Request all registries (auth is considered completed whence they arrive)
+ 	intif_request_registry(sd,7);
+ 	return true;
+@@ -3825,7 +3839,7 @@ int pc_additem(struct map_session_data *sd,struct item *item_data,int amount)
+ 	{ // Stackable | Non Rental
+ 		for( i = 0; i < MAX_INVENTORY; i++ )
+ 		{
+-			if( sd->status.inventory[i].nameid == item_data->nameid && memcmp(&sd->status.inventory[i].card, &item_data->card, sizeof(item_data->card)) == 0 )
++			if( sd->status.inventory[i].nameid == item_data->nameid && sd->status.inventory[i].bound == item_data->bound && memcmp(&sd->status.inventory[i].card, &item_data->card, sizeof(item_data->card)) == 0 )
+ 			{
+ 				if( amount > MAX_AMOUNT - sd->status.inventory[i].amount )
+ 					return 5;
+@@ -4340,7 +4354,7 @@ int pc_cart_additem(struct map_session_data *sd,struct item *item_data,int amoun
+ 		return 1;
+ 	data = itemdb_search(item_data->nameid);
+ 
+-	if( !itemdb_cancartstore(item_data, pc_isGM(sd)) )
++	if( !itemdb_cancartstore(item_data, pc_isGM(sd)) || (item_data->bound > 1 && !pc_can_give_bounded_items(sd->gmlevel)))
+ 	{ // Check item trade restrictions	[Skotlex]
+ 		clif_displaymessage (sd->fd, msg_txt(264));
+ 		return 1;
+@@ -4353,7 +4367,7 @@ int pc_cart_additem(struct map_session_data *sd,struct item *item_data,int amoun
+ 	if( itemdb_isstackable2(data) && !item_data->expire_time )
+ 	{
+ 		ARR_FIND( 0, MAX_CART, i,
+-			sd->status.cart[i].nameid == item_data->nameid &&
++			sd->status.cart[i].nameid == item_data->nameid && sd->status.cart[i].bound == item_data->bound &&
+ 			sd->status.cart[i].card[0] == item_data->card[0] && sd->status.cart[i].card[1] == item_data->card[1] &&
+ 			sd->status.cart[i].card[2] == item_data->card[2] && sd->status.cart[i].card[3] == item_data->card[3] );
+ 	};
+@@ -5304,6 +5318,25 @@ int pc_mapid2jobid(unsigned short class_, int sex)
+ 	}
+ }
+ 
++/*========================================== 
++ * Bound Item Check 
++ * Type: 
++ * 1 Account Bound 
++ * 2 Guild Bound 
++ * 3 Party Bound
++ * 4 Character Bound
++ *------------------------------------------*/ 
++int pc_bound_chk(TBL_PC *sd,int type,int *idxlist) { 
++	int i=0, j=0; 
++	for(i=0;i<MAX_INVENTORY;i++){ 
++		if(sd->status.inventory[i].nameid > 0 && sd->status.inventory[i].amount > 0 && sd->status.inventory[i].bound == type) { 
++			idxlist[j] = i; 
++			j++; 
++		} 
++	} 
++	return j; 
++} 
++
+ /*====================================================
+  * This function return the name of the job (by [Yor])
+  *----------------------------------------------------*/
+@@ -7806,7 +7839,7 @@ int pc_setmadogear(TBL_PC* sd, int flag)
+ int pc_candrop(struct map_session_data *sd,struct item *item)
+ {
+ 	int level = pc_isGM(sd);
+-	if( item && item->expire_time )
++	if( item && (item->expire_time || (item->bound && !pc_can_give_bounded_items(sd->gmlevel))) )
+ 		return 0;
+ 	if( !pc_can_give_items(level) ) //check if this GM level can drop items
+ 		return 0;
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 4f555fb..8026519 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -645,6 +645,7 @@ int pc_class2idx(int class_);
+ int pc_isGM(struct map_session_data *sd);
+ int pc_getrefinebonus(int lv,int type);
+ bool pc_can_give_items(int level);
++bool pc_can_give_bounded_items(int level);
+ 
+ int pc_setrestartvalue(struct map_session_data *sd,int type);
+ int pc_makesavestatus(struct map_session_data *);
+@@ -684,6 +685,9 @@ int pc_additem(struct map_session_data*,struct item*,int);
+ int pc_getzeny(struct map_session_data*,int);
+ int pc_delitem(struct map_session_data*,int,int,int,short);
+ 
++//Bound items 
++int pc_bound_chk(TBL_PC *sd,int type,int *idxlist);
++
+ // Special Shop System
+ void pc_paycash(struct map_session_data *sd, int price, int points);
+ void pc_getcash(struct map_session_data *sd, int cash, int points);
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index 48ea068..b7ae3bd 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -102,6 +102,9 @@
+ #define script_getstr(st,val) conv_str(st, script_getdata(st,val))
+ #define script_getref(st,val) ( script_getdata(st,val)->ref )
+ 
++// Returns name of currently running function 
++#define script_getfuncname(st) ( st->funcname )
++
+ // Note: "top" functions/defines use indexes relative to the top of the stack
+ //       -1 is the index of the data at the top
+ 
+@@ -3192,10 +3195,10 @@ int run_func(struct script_state *st)
+ 	st->end = end_sp;
+ 
+ 	data = &st->stack->stack_data[st->start];
+-	if( data->type == C_NAME && str_data[data->u.num].type == C_FUNC )
++	if( data->type == C_NAME && str_data[data->u.num].type == C_FUNC ) {
+ 		func = data->u.num;
+-	else
+-	{
++		st->funcname = reference_getname(data);
++	} else {
+ 		ShowError("script:run_func: not a buildin command.\n");
+ 		script_reportdata(data);
+ 		script_reportsrc(st);
+@@ -5562,6 +5565,14 @@ BUILDIN_FUNC(checkweight)
+ /*==========================================
+  * getitem <item id>,<amount>{,<character ID>};
+  * getitem "<item name>",<amount>{,<character ID>};
++ * 
++ * getitembound <item id>,<amount>,<type>{,<account ID>}; 
++ * getitembound "<item id>",<amount>,<type>{,<account ID>}; 
++ * Type: 
++ *      1 - Account Bound 
++ *      2 - Guild Bound 
++ *      3 - Party Bound 
++ *      4 - Character Bound
+  *------------------------------------------*/
+ BUILDIN_FUNC(getitem)
+ {
+@@ -5609,7 +5620,18 @@ BUILDIN_FUNC(getitem)
+ 	else
+ 		it.identify=itemdb_isidentified(nameid);
+ 
+-	if( script_hasdata(st,4) )
++	if( !strcmp(script_getfuncname(st),"getitembound") ) { 
++		char bound = script_getnum(st,4); 
++		if( bound < 1 || bound > 4) { //Not a correct bound type 
++			ShowError("script_getitembound: Not a correct bound type! Type=%d\n",bound); 
++			return 1; 
++		} 
++		it.bound = bound; 
++		if( script_hasdata(st,5) ) 
++			sd=map_id2sd(script_getnum(st,5)); 
++		else 
++			sd=script_rid2sd(st); // Attached player 
++	} else if( script_hasdata(st,4) ) 
+ 		sd=map_id2sd(script_getnum(st,4)); // <Account ID>
+ 	else
+ 		sd=script_rid2sd(st); // Attached player
+@@ -5651,12 +5673,23 @@ BUILDIN_FUNC(getitem2)
+ {
+ 	int nameid,amount,get_count,i,flag = 0;
+ 	int iden,ref,attr,c1,c2,c3,c4;
++	char bound=0;
+ 	struct item_data *item_data;
+ 	struct item item_tmp;
+ 	TBL_PC *sd;
+ 	struct script_data *data;
+ 
+-	if( script_hasdata(st,11) )
++	if( !strcmp(script_getfuncname(st),"getitembound2") ) { 
++		bound = script_getnum(st,11); 
++		if( bound < 1 || bound > 3) { //Not a correct bound type 
++			ShowError("script_getitembound2: Not a correct bound type! Type=%d\n",bound); 
++			return 1; 
++		} 
++		if( script_hasdata(st,12) ) 
++			sd=map_id2sd(script_getnum(st,12)); 
++		else 
++			sd=script_rid2sd(st); // Attached player 
++	} else if( script_hasdata(st,11) )
+ 		sd=map_id2sd(script_getnum(st,11)); // <Account ID>
+ 	else
+ 		sd=script_rid2sd(st); // Attached player
+@@ -5718,6 +5751,7 @@ BUILDIN_FUNC(getitem2)
+ 		item_tmp.card[1]=(short)c2;
+ 		item_tmp.card[2]=(short)c3;
+ 		item_tmp.card[3]=(short)c4;
++		item_tmp.bound=bound;
+ 
+ 		//Check if it's stackable.
+ 		if (!itemdb_isstackable(nameid))
+@@ -5796,6 +5830,7 @@ BUILDIN_FUNC(rentitem)
+ 	it.nameid = nameid;
+ 	it.identify = 1;
+ 	it.expire_time = (unsigned int)(time(NULL) + seconds);
++	it.bound = 0;
+ 
+ 	if( (flag = pc_additem(sd, &it, 1)) )
+ 	{
+@@ -10408,9 +10443,10 @@ BUILDIN_FUNC(successremovecards)
+ 			int flag;
+ 			struct item item_tmp;
+ 			cardflag = 1;
+-			item_tmp.id=0,item_tmp.nameid=sd->status.inventory[i].card[c];
+-			item_tmp.equip=0,item_tmp.identify=1,item_tmp.refine=0;
+-			item_tmp.attribute=0,item_tmp.expire_time=0;
++		item_tmp.id			=0,item_tmp.nameid=sd->status.inventory[i].nameid;
++		item_tmp.equip		=0,item_tmp.identify=1,item_tmp.refine=sd->status.inventory[i].refine;
++		item_tmp.attribute	=sd->status.inventory[i].attribute,item_tmp.expire_time=sd->status.inventory[i].expire_time;
++		item_tmp.bound		= sd->status.inventory[i].bound;
+ 			for (j = 0; j < MAX_SLOTS; j++)
+ 				item_tmp.card[j]=0;
+ 
+@@ -10520,9 +10556,10 @@ BUILDIN_FUNC(failedremovecards)
+ 		if(typefail == 1){	// カードのみ損失（武具を返す）
+ 			int flag;
+ 			struct item item_tmp;
+-			item_tmp.id=0,item_tmp.nameid=sd->status.inventory[i].nameid;
+-			item_tmp.equip=0,item_tmp.identify=1,item_tmp.refine=sd->status.inventory[i].refine;
+-			item_tmp.attribute=sd->status.inventory[i].attribute,item_tmp.expire_time=sd->status.inventory[i].expire_time;
++			item_tmp.id			=0,item_tmp.nameid=sd->status.inventory[i].nameid;
++			item_tmp.equip		=0,item_tmp.identify=1,item_tmp.refine=sd->status.inventory[i].refine;
++			item_tmp.attribute	=sd->status.inventory[i].attribute,item_tmp.expire_time=sd->status.inventory[i].expire_time;
++			item_tmp.bound		= sd->status.inventory[i].bound;
+ 
+ 			//Logs items, got from (N)PC scripts [Lupus]
+ 			if(log_config.enable_logs&0x40)
+@@ -11172,6 +11209,7 @@ BUILDIN_FUNC(getinventorylist)
+ 				pc_setreg(sd,reference_uid(add_str(card_var), j),sd->status.inventory[i].card[k]);
+ 			}
+ 			pc_setreg(sd,reference_uid(add_str("@inventorylist_expire"), j),sd->status.inventory[i].expire_time);
++			pc_setreg(sd,reference_uid(add_str("@inventorylist_bound"), j),sd->status.inventory[i].bound);
+ 			j++;
+ 		}
+ 	}
+@@ -15074,6 +15112,39 @@ BUILDIN_FUNC(opendressroom)
+ 	return 0;
+ }
+ 
++/*========================================== 
++ * countbound {<type>}; 
++ * Creates an array of bounded item IDs 
++ * Returns amount of items found 
++ * Type: 
++ *      1 - Account Bound 
++ *      2 - Guild Bound 
++ *      3 - Party Bound 
++ *------------------------------------------*/ 
++BUILDIN_FUNC(countbound) { 
++	int i, type, j=0, k=0; 
++	TBL_PC *sd; 
++
++	if( (sd = script_rid2sd(st)) == NULL ) 
++		return 0; 
++	 
++	type = script_hasdata(st,2)?script_getnum(st,2):0; 
++ 
++	for(i=0;i<MAX_INVENTORY;i++){ 
++		if(sd->status.inventory[i].nameid > 0 && ( 
++			(!type && sd->status.inventory[i].bound > 0) || 
++			(type && sd->status.inventory[i].bound == type) 
++		)) { 
++			pc_setreg(sd,reference_uid(add_str("@bound_items"), k),sd->status.inventory[i].nameid); 
++			k++; 
++			j += sd->status.inventory[i].amount; 
++		} 
++	} 
++       
++	script_pushint(st,j); 
++	return 0; 
++}
++
+ // declarations that were supposed to be exported from npc_chat.c
+ #ifdef PCRE_SUPPORT
+ BUILDIN_FUNC(defpattern);
+@@ -15490,5 +15561,10 @@ struct script_function buildin_func[] = {
+ 	// 3CeAM
+ 	BUILDIN_DEF(opendressroom,"?"),
+ 
++	//Bound items, Thanks to Xantara & Akinari [15peaces] 
++	BUILDIN_DEF2(getitem,"getitembound","vii?"), 
++	BUILDIN_DEF2(getitem2,"getitembound2","viiiiiiiii?"), 
++	BUILDIN_DEF(countbound, "?"),
++
+ 	{NULL,NULL,NULL},
+ };
+diff --git a/rewrite/src/map/script.h b/rewrite/src/map/script.h
+index c272f2d..8f62d21 100644
+--- a/rewrite/src/map/script.h
++++ b/rewrite/src/map/script.h
+@@ -125,6 +125,7 @@ struct script_state {
+ 	//For backing up purposes
+ 	struct script_state *bk_st;
+ 	int bk_npcid;
++	unsigned char* funcname; // Stores the current running function name
+ };
+ 
+ struct script_reg {
+diff --git a/rewrite/src/map/storage.c b/rewrite/src/map/storage.c
+index 4eb1beb..ded8bef 100644
+--- a/rewrite/src/map/storage.c
++++ b/rewrite/src/map/storage.c
+@@ -115,7 +115,8 @@ int compare_item(struct item *a, struct item *b)
+ 		a->identify == b->identify &&
+ 		a->refine == b->refine &&
+ 		a->attribute == b->attribute &&
+-		a->expire_time == b->expire_time )
++		a->expire_time == b->expire_time && 
++		a->bound == b->bound)
+ 	{
+ 		int i;
+ 		for (i = 0; i < MAX_SLOTS && (a->card[i] == b->card[i]); i++);
+@@ -143,6 +144,11 @@ static int storage_additem(struct map_session_data* sd, struct item* item_data,
+ 		clif_displaymessage (sd->fd, msg_txt(264));
+ 		return 1;
+ 	}
++
++	if( (item_data->bound > 1) && !pc_can_give_bounded_items(sd->gmlevel) ) { 
++		clif_displaymessage(sd->fd, msg_txt(294)); 
++		return 1; 
++	}
+ 	
+ 	if( itemdb_isstackable2(data) )
+ 	{//Stackable
+@@ -405,6 +411,11 @@ int guild_storage_additem(struct map_session_data* sd, struct guild_storage* sto
+ 		return 1;
+ 	}
+ 
++	if( (item_data->bound == 1 || item_data->bound > 2) && !pc_can_give_bounded_items(sd->gmlevel) ) { 
++		clif_displaymessage(sd->fd, msg_txt(294)); 
++		return 1; 
++	} 
++
+ 	if(itemdb_isstackable2(data)){ //Stackable
+ 		for(i=0;i<MAX_GUILD_STORAGE;i++){
+ 			if(compare_item(&stor->items[i], item_data)) {
+diff --git a/rewrite/src/map/storage.h b/rewrite/src/map/storage.h
+index 5a38d86..c08ec81 100644
+--- a/rewrite/src/map/storage.h
++++ b/rewrite/src/map/storage.h
+@@ -24,6 +24,7 @@ void do_reconnect_storage(void);
+ void storage_storage_quit(struct map_session_data *sd, int flag);
+ 
+ struct guild_storage* guild2storage(int guild_id);
++struct guild_storage *guild2storage2(int guild_id);
+ int guild_storage_delete(int guild_id);
+ int storage_guild_storageopen(struct map_session_data *sd);
+ int guild_storage_additem(struct map_session_data *sd,struct guild_storage *stor,struct item *item_data,int amount);
+diff --git a/rewrite/src/map/trade.c b/rewrite/src/map/trade.c
+index fb9fecb..79fcf3a 100644
+--- a/rewrite/src/map/trade.c
++++ b/rewrite/src/map/trade.c
+@@ -362,6 +362,12 @@ void trade_tradeadditem(struct map_session_data *sd, short index, short amount)
+ 		return;
+ 	}
+ 
++	if( ((item->bound == 1 || item->bound > 2) || (item->bound == 2 && sd->status.guild_id != target_sd->status.guild_id)) && !pc_can_give_bounded_items(sd-> gmlevel) ) { // Item Bound 
++		clif_displaymessage(sd->fd, msg_txt(293)); 
++		clif_tradeitemok(sd, index+2, 1); 
++		return; 
++	}
++
+ 	//Locate a trade position
+ 	ARR_FIND( 0, 10, trade_i, sd->deal.item[trade_i].index == index || sd->deal.item[trade_i].amount == 0 );
+ 	if( trade_i == 10 ) //No space left
+diff --git a/rewrite/src/map/vending.c b/rewrite/src/map/vending.c
+index 3755799..7ee8708 100644
+--- a/rewrite/src/map/vending.c
++++ b/rewrite/src/map/vending.c
+@@ -288,6 +288,7 @@ void vending_openvending(struct map_session_data* sd, const char* message, bool
+ 		||  !sd->status.cart[index].identify // unidentified item
+ 		||  sd->status.cart[index].attribute == 1 // broken item
+ 		||  sd->status.cart[index].expire_time // It should not be in the cart but just in case
++		||  (sd->status.cart[index].bound && !pc_can_give_bounded_items(sd->gmlevel)) // can't trade account bound items and has no permission
+ 		||  !itemdb_cantrade(&sd->status.cart[index], pc_isGM(sd), pc_isGM(sd)) ) // untradeable item
+ 			continue;
+ 
