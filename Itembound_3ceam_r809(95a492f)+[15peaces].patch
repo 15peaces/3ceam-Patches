@@ -258,7 +258,7 @@ index 6d30b78..d88b90e 100644
    KEY `account_id` (`account_id`)
  ) ENGINE=MyISAM;
 diff --git a/rewrite/src/char_sql/char.c b/rewrite/src/char_sql/char.c
-index 9f6bf32..86eefdb 100644
+index 9f6bf32..4bfce43 100644
 --- a/rewrite/src/char_sql/char.c
 +++ b/rewrite/src/char_sql/char.c
 @@ -711,7 +711,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
@@ -274,7 +274,7 @@ index 9f6bf32..86eefdb 100644
  	SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,      &item.refine,      0, NULL, NULL);
  	SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &item.attribute,   0, NULL, NULL);
  	SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &item.expire_time, 0, NULL, NULL);
-+	SqlStmt_BindColumn(stmt, 8, SQLDT_UINT,      &item.bound,       0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 8, SQLDT_CHAR,      &item.bound,       0, NULL, NULL);
  	for( j = 0; j < MAX_SLOTS; ++j )
 -		SqlStmt_BindColumn(stmt, 8+j, SQLDT_SHORT, &item.card[j], 0, NULL, NULL);
 +		SqlStmt_BindColumn(stmt, 9+j, SQLDT_SHORT, &item.card[j], 0, NULL, NULL);
