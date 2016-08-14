@@ -1,0 +1,98 @@
+ rewrite/doc/script_commands.txt | 10 +++++++++
+ rewrite/src/map/script.c        | 48 ++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 57 insertions(+), 1 deletion(-)
+
+diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
+index db45581..85924a3 100644
+--- a/rewrite/doc/script_commands.txt
++++ b/rewrite/doc/script_commands.txt
+@@ -4546,6 +4546,16 @@ The official scripts seem to use the 'failedrefitem' command as a function
+ instead: 'failedrefitem(<number>)' but it returns nothing on the stack. This is 
+ since jAthena, so probably nobody knows for sure why is it so.
+ 
++---------------------------------------
++
++*downrefitem <equipment slot>{,<downgrade_count>};
++
++This command will downgrade an item by - 1 (unless optional <downgrade_count> is provided)
++in the specified equipment slot  of the invoking character.
++So the item will not be destroyed unlike in the 
++failedrefitem script command. This will also display a 'refine failure' 
++effect on the character and put appropriate messages into their chat 
++window.
+ 
+ ---------------------------------------
+ 
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index 48ea068..42e875f 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -6907,7 +6907,7 @@ BUILDIN_FUNC(successrefitem)
+ }
+ 
+ /*==========================================
+- * ¸˜BŽ¸”s
++ * Show a failed Refine +1 attempt
+  *------------------------------------------*/
+ BUILDIN_FUNC(failedrefitem)
+ {
+@@ -6940,6 +6940,51 @@ BUILDIN_FUNC(failedrefitem)
+ }
+ 
+ /*==========================================
++ * Downgrades an Equipment Part by -1 . [Masao]
++ *------------------------------------------*/
++BUILDIN_FUNC(downrefitem) {
++	short i = -1, down = 1;
++	int pos;
++	TBL_PC *sd;
++
++	sd = script_rid2sd(st);
++	if( sd == NULL )
++		return 0;
++	pos = script_getnum(st,2);
++	if (script_hasdata(st, 3))
++		down = script_getnum(st, 3);
++
++	if (pos > 0 && pos <= ARRAYLENGTH(equip))
++		i = pc_checkequip(sd,equip[pos-1]);
++	if (i >= 0) {
++		unsigned int ep = sd->status.inventory[i].equip;
++
++		//Logs items, got from (N)PC scripts [Lupus]
++		log_pick_pc(sd, "N", sd->status.inventory[i].nameid, -1, &sd->status.inventory[i]);
++
++		pc_unequipitem(sd,i,2); // status calc will happen in pc_equipitem() below
++		sd->status.inventory[i].refine -= down;
++		sd->status.inventory[i].refine = cap_value( sd->status.inventory[i].refine, 0, MAX_REFINE);
++
++		clif_refine(sd->fd,2,i,sd->status.inventory[i].refine);
++		clif_delitem(sd,i,1,3);
++
++		//Logs items, got from (N)PC scripts [Lupus]
++		log_pick_pc(sd, "N", sd->status.inventory[i].nameid, -1, &sd->status.inventory[i]);
++
++		clif_additem(sd,i,1,0);
++		pc_equipitem(sd,i,ep);
++		clif_misceffect(&sd->bl,2);
++		script_pushint(st, sd->status.inventory[i].refine);
++		return 1;
++	}
++
++	ShowError("buildin_downrefitem: No item equipped at pos %d (CID=%d/AID=%d).\n", pos, sd->status.char_id, sd->status.account_id);
++	script_pushint(st, -1);
++	return 0;
++}
++
++/*==========================================
+  *
+  *------------------------------------------*/
+ BUILDIN_FUNC(statusup)
+@@ -15157,6 +15202,7 @@ struct script_function buildin_func[] = {
+ 	BUILDIN_DEF(getequippercentrefinery,"i"),
+ 	BUILDIN_DEF(successrefitem,"i"),
+ 	BUILDIN_DEF(failedrefitem,"i"),
++	BUILDIN_DEF(downrefitem,"i?"),
+ 	BUILDIN_DEF(statusup,"i"),
+ 	BUILDIN_DEF(statusup2,"ii"),
+ 	BUILDIN_DEF(bonus,"iv"),
