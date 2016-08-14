@@ -1,0 +1,157 @@
+ rewrite/conf/battle/feature.conf |  5 ++++
+ rewrite/src/map/battle.c         |  1 +
+ rewrite/src/map/battle.h         |  2 ++
+ rewrite/src/map/pc.h             |  4 +++
+ rewrite/src/map/skill.c          | 53 ++++++++++++++++++++++++++++++++++++++++
+ rewrite/src/map/skill.h          |  4 +++
+ 6 files changed, 69 insertions(+)
+
+diff --git a/rewrite/conf/battle/feature.conf b/rewrite/conf/battle/feature.conf
+index ae1c00b..23dfd0b 100644
+--- a/rewrite/conf/battle/feature.conf
++++ b/rewrite/conf/battle/feature.conf
+@@ -26,3 +26,8 @@ feature.buying_store: on
+ // Search stores (Note 1)
+ // Requires: 2010-08-03aRagexeRE or later
+ feature.search_stores: on
++
++//Make sure nodelay grf user still follow the rules
++//Even the nodelay GRF doesn't work on 2013 client
++//i suggest to use this feature.[Kichi] (Note 1)
++sec_nodelay_protect: on
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index 6825284..3ac1e3b 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -6090,6 +6090,7 @@ static const struct _battle_data {
+ 	{ "gc_skill_edp_boost_formula_a",       &battle_config.gc_skill_edp_boost_formula_a,    0,      0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_b",       &battle_config.gc_skill_edp_boost_formula_b,    20,     0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_c",       &battle_config.gc_skill_edp_boost_formula_c,    1,      0,      1,              },
++	{ "nodelay_protect",					&battle_config.nodelay_protect,					1,      0,      1,              },
+ };
+ 
+ 
+diff --git a/rewrite/src/map/battle.h b/rewrite/src/map/battle.h
+index cd3bc00..686512a 100644
+--- a/rewrite/src/map/battle.h
++++ b/rewrite/src/map/battle.h
+@@ -550,6 +550,8 @@ extern struct Battle_Config
+ 	int gc_skill_edp_boost_formula_b;
+ 	int gc_skill_edp_boost_formula_c;
+ 
++	int nodelay_protect;
++
+ } battle_config;
+ 
+ void do_init_battle(void);
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 4f555fb..1b8ac20 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -154,6 +154,7 @@ struct map_session_data {
+ 		unsigned magicmushroom_flag : 1;
+ 		unsigned no_gemstone : 1; // If a skill have a partner near, it don't consume gemstone but SP from all (ADORAMUS, COMET)
+ 		unsigned fearbreeze : 4; // Arrows used on SC_FEARBREEZE
++		unsigned int skill_check_double : 1; // Thanks to Kichi[15peaces]
+ 	} state;
+ 	struct {
+ 		unsigned char no_weapon_damage, no_magic_damage, no_misc_damage;
+@@ -223,6 +224,9 @@ struct map_session_data {
+ 	unsigned int cantalk_tick;
+ 	unsigned int cansendmail_tick; // [Mail System Flood Protection]
+ 	unsigned int ks_floodprotect_tick; // [Kill Steal Protection]
++	//Thanks to Kichi [15peaces]
++	unsigned int canskill_tick2;	// Tick check for nodelay protection
++	unsigned int last_skill;		// Last Skill check for nodelay protection
+ 	
+ 	struct {
+ 		int nameid;
+diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
+index c102c51..086e40b 100644
+--- a/rewrite/src/map/skill.c
++++ b/rewrite/src/map/skill.c
+@@ -14483,6 +14483,9 @@ int skill_castfix (struct block_list *bl, int skill_id, int skill_lv)
+ 	if (battle_config.cast_rate != 100)
+ 		final_time = final_time * battle_config.cast_rate / 100;
+ 
++	if(sd) //NDG Protection [Kichi]
++		skill_delay_check(sd,skill_id,skill_lv,0);
++
+ 	// Return final cast time.
+ 	return (final_time > 0) ? final_time : 0;
+ }
+@@ -14579,9 +14582,59 @@ int skill_delayfix (struct block_list *bl, int skill_id, int skill_lv)
+ 	if (time < status_get_amotion(bl))
+ 		time = status_get_amotion(bl); // Delay can never be below amotion [Playtester]
+ 
++	if(battle_config.nodelay_protect)
++	if (sd->state.skill_check_double){
++		time = skill_delay_penalty(skill_id);
++		sd->state.skill_check_double = 0 ;
++	}
++
+ 	return max(time, battle_config.min_skill_delay_limit);
+ }
+ 
++int skill_delay_check (struct map_session_data *sd, uint16 skill_id, uint16 skill_lv,uint16 flag) {
++	switch (skill_id) {
++		case AS_SONICBLOW:
++		case GC_CROSSIMPACT:
++		case CG_ARROWVULCAN:
++			if (sd->last_skill = skill_id)
++				if(( DIFF_TICK(sd->canskill_tick2, gettick()) > 0 ))
++					sd->state.skill_check_double = 1 ;
++				else
++					sd->canskill_tick2 = gettick() + 1500;
++		break;
++		case RK_DRAGONBREATH:
++		case RK_DRAGONBREATH_WATER:
++			if (sd->last_skill = skill_id)
++				if(( DIFF_TICK(sd->canskill_tick2, gettick()) > 0 ))
++					sd->state.skill_check_double = 1 ;
++				else
++					sd->canskill_tick2 = gettick() + 1000;
++		break;
++		default:
++		break;
++		}
++	sd->last_skill = skill_id;
++	return 1;
++}
++int skill_delay_penalty(uint16 skill_id) {
++	int time = 0;
++	switch (skill_id) {
++		case AS_SONICBLOW:
++		case GC_CROSSIMPACT:
++		case CG_ARROWVULCAN:
++			time = 2000;
++		break;
++		case RK_DRAGONBREATH:
++		case RK_DRAGONBREATH_WATER:
++			time = 1200;
++		break;
++		default:
++			time = 1000;
++		break;
++	}
++	return time;
++}
++
+ /*=========================================
+  *
+  *-----------------------------------------*/
+diff --git a/rewrite/src/map/skill.h b/rewrite/src/map/skill.h
+index 20e6741..fd84f1c 100644
+--- a/rewrite/src/map/skill.h
++++ b/rewrite/src/map/skill.h
+@@ -397,6 +397,10 @@ int skill_attack( int attack_type, struct block_list* src, struct block_list *ds
+ 
+ void skill_reload(void);
+ 
++//NDG Protection, thanks to Kichi [15peaces]
++int skill_delay_check (struct map_session_data *sd, uint16 skill_id, uint16 skill_lv,uint16 flag);
++int skill_delay_penalty(uint16 skill_id);
++
+ enum {
+ 	ST_NONE,
+ 	ST_HIDING,
