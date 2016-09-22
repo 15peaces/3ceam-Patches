@@ -67,7 +67,7 @@ index 4f555fb..1b8ac20 100644
  	struct {
  		int nameid;
 diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
-index c102c51..086e40b 100644
+index c102c51..2c9c659 100644
 --- a/rewrite/src/map/skill.c
 +++ b/rewrite/src/map/skill.c
 @@ -14483,6 +14483,9 @@ int skill_castfix (struct block_list *bl, int skill_id, int skill_lv)
@@ -84,7 +84,7 @@ index c102c51..086e40b 100644
  	if (time < status_get_amotion(bl))
  		time = status_get_amotion(bl); // Delay can never be below amotion [Playtester]
  
-+	if(battle_config.nodelay_protect)
++	if(battle_config.nodelay_protect && skill_id < HLIF_HEAL && skill_id > EL_STONE_RAIN)
 +	if (sd->state.skill_check_double){
 +		time = skill_delay_penalty(skill_id);
 +		sd->state.skill_check_double = 0 ;
