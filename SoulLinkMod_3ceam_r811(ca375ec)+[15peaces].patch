@@ -1,0 +1,185 @@
+ rewrite/src/map/battle.c | 12 ++++++++++++
+ rewrite/src/map/skill.c  | 47 ++++++++++++++++++++++++++++++++++++++++++++---
+ rewrite/src/map/status.c | 19 +++++++++++++++++++
+ 3 files changed, 75 insertions(+), 3 deletions(-)
+
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index b120b93..577b72c 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -1925,6 +1925,8 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
+ 				case AC_DOUBLE:
+ 				case MA_DOUBLE:
+ 					skillratio += 10*(skill_lv-1);
++					if(sc->data[SC_SPIRIT] && (sc->data[SC_SPIRIT]->val2 == SL_HUNTER || sc->data[SC_SPIRIT]->val2 == SL_ROGUE))
++						skillratio += 200;
+ 					break;
+ 				case AC_SHOWER:
+ 				case MA_SHOWER:
+@@ -1969,9 +1971,13 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
+ 				case KN_BOWLINGBASH:
+ 				case MS_BOWLINGBASH:
+ 					skillratio+= 40*skill_lv;
++					if(sc->data[SC_SPIRIT] && (sc->data[SC_SPIRIT]->val2 == SL_KNIGHT ))
++						skillratio += 10;
+ 					break;
+ 				case AS_GRIMTOOTH:
+ 					skillratio += 20*skill_lv;
++					if (sd && sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_ASSASIN)
++						skillratio += 40;
+ 					break;
+ 				case AS_POISONREACT:
+ 					skillratio += 30*skill_lv;
+@@ -2042,9 +2048,13 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
+ 					break;
+ 				case AM_ACIDTERROR:
+ 					skillratio += 40*skill_lv;
++					if (sd && sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_ALCHEMIST)
++						skillratio += 20;
+ 					break;
+ 				case MO_FINGEROFFENSIVE:
+ 					skillratio+= 50 * skill_lv;
++					if (sd && sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_MONK)
++						skillratio += 20;
+ 					break;
+ 				case MO_INVESTIGATE:
+ 					skillratio += 75*skill_lv;
+@@ -2115,6 +2125,8 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
+ 					skillratio += 30*skill_lv;
+ 					if( sc && sc->data[SC_GLOOMYDAY_SK] )
+ 						skillratio += skillratio * (15 + rand()%sc->data[SC_GLOOMYDAY_SK]->val3) / 100;
++					if (sd && sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_CRUSADER)
++						skillratio += 50; //Gives Shield Chain for 50% Damage
+ 					break;
+ 				case WS_CARTTERMINATION:
+ 					i = 10 * (16 - skill_lv);
+diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
+index c102c51..f0feea0 100644
+--- a/rewrite/src/map/skill.c
++++ b/rewrite/src/map/skill.c
+@@ -746,6 +746,14 @@ int skill_additional_effect (struct block_list* src, struct block_list *bl, int
+ 				rate=(sd->status.job_level+9)/10;
+ 				skill_castend_damage_id(src,bl,HT_BLITZBEAT,(skill<rate)?skill:rate,tick,SD_LEVEL);
+ 			}
++
++			// Automatic trigger of Falcon Assault, customized source. [MarkZD]
++			if (sc && sc->data[SC_SPIRIT] && sc->data[SC_SPIRIT]->val2 == SL_HUNTER && pc_isfalcon(sd) && sd->status.weapon == W_BOW &&
++			(skill=pc_checkskill(sd,SN_FALCONASSAULT))>0 &&
++				rand()%1000 <= sstatus->luk*10/3+1 ) {
++				skill_castend_damage_id(src,bl,SN_FALCONASSAULT,skill,tick,SD_LEVEL);
++			}
++
+ 			// Automatic trigger of Warg Strike [Jobbie]
+ 			if( pc_iswug(sd) && sd->status.weapon == W_BOW && (skill=pc_checkskill(sd,RA_WUGSTRIKE)) > 0 && rand()%1000 <= sstatus->luk*10/3+1 )
+ 				skill_castend_damage_id(src,bl,RA_WUGSTRIKE,skill,tick,0);
+@@ -1506,8 +1514,8 @@ int skill_additional_effect (struct block_list* src, struct block_list *bl, int
+ 			if( !battle_check_range(src, tbl, skill_get_range2(src, skill,skilllv) + (skill == RG_CLOSECONFINE?0:1)) && battle_config.autospell_check_range )
+ 				continue; // If autospell_check_range is yes, fail the autocast.
+ 
+-			if (skill == AS_SONICBLOW)
+-				pc_stop_attack(sd); //Special case, Sonic Blow autospell should stop the player attacking.
++			/* if (skill == AS_SONICBLOW)
++				pc_stop_attack(sd); //Special case, Sonic Blow autospell should stop the player attacking. */
+ 
+ 			sd->state.autocast = 1;
+ 			skill_consume_requirement(sd,skill,skilllv,1);
+@@ -6433,6 +6441,39 @@ int skill_castend_nodamage_id (struct block_list *src, struct block_list *bl, in
+ 			break;
+ 		}
+ 
++		if ( sd && tsc && sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_ROGUE && rand()%100 < 15 &&
++			( skillid == RG_STRIPWEAPON && tsc->data[SC_CP_WEAPON] ||
++			skillid == RG_STRIPSHIELD && tsc->data[SC_CP_SHIELD] ||
++			skillid == RG_STRIPARMOR && tsc->data[SC_CP_ARMOR] ||
++			skillid == RG_STRIPHELM && tsc->data[SC_CP_HELM] ) ) {
++			int item_id = 7139; // Glistening Coat
++			int ii;
++			ARR_FIND( 0, MAX_INVENTORY, ii, sd->status.inventory[ii].nameid == item_id );
++			if ( ii < MAX_INVENTORY ) {
++				pc_delitem( sd, ii, 1, 0, 0);
++				switch ( skillid ) {
++					case RG_STRIPWEAPON:
++						status_change_end( bl, SC_CP_WEAPON, INVALID_TIMER );
++						sc_start( bl, SC_STRIPWEAPON, 100, skilllv, d );
++						break;
++					case RG_STRIPSHIELD:
++						status_change_end( bl, SC_CP_SHIELD, INVALID_TIMER );
++						sc_start( bl, SC_STRIPSHIELD, 100, skilllv, d );
++						break;
++					case RG_STRIPARMOR:
++						status_change_end( bl, SC_CP_ARMOR, INVALID_TIMER );
++						sc_start( bl, SC_STRIPARMOR, 100, skilllv, d );
++						break;
++					case RG_STRIPHELM:
++						status_change_end( bl, SC_CP_HELM, INVALID_TIMER );
++						sc_start( bl, SC_STRIPHELM, 100, skilllv, d );
++					break;
++				}
++				clif_skill_nodamage( src, bl, skillid, skilllv, i );
++				break;
++			}
++		}
++
+ 		//Attempts to strip at rate i and duration d
+ 		if( (i = skill_strip_equip(bl, location, i, skilllv, d)) || (skillid != ST_FULLSTRIP && skillid != GC_WEAPONCRUSH) )
+ 			clif_skill_nodamage(src,bl,skillid,skilllv,i); 
+@@ -13773,7 +13814,7 @@ int skill_check_condition_castbegin(struct map_session_data* sd, short skill, sh
+ 		return 0;
+ 	}
+ 
+-	if( require.weapon && !pc_check_weapontype(sd,require.weapon) ) {
++	if( require.weapon && !(pc_check_weapontype(sd,require.weapon) || (skill = LK_PARRYING && sc && sc->data[SC_SPIRIT] && sc->data[SC_SPIRIT]->val2 == SL_KNIGHT && sd->status.weapon == W_1HSWORD) || (skill = LK_PARRYING && sc && sc->data[SC_SPIRIT] && sc->data[SC_SPIRIT]->val2 == SL_STAR && sd->status.weapon == W_BOOK) ) ){ 
+ 		clif_skill_fail(sd,skill,6,0,0);
+ 		return 0;
+ 	}
+diff --git a/rewrite/src/map/status.c b/rewrite/src/map/status.c
+index c423df0..c0d6e6e 100644
+--- a/rewrite/src/map/status.c
++++ b/rewrite/src/map/status.c
+@@ -4224,6 +4224,9 @@ static unsigned short status_calc_vit(struct block_list *bl, struct status_chang
+ 		vit -= sc->data[SC_MARIONETTE]->val3&0xFF;
+ 	if(sc->data[SC_MARIONETTE2])
+ 		vit += sc->data[SC_MARIONETTE2]->val3&0xFF;
++	// Sage & Wizard Link Spirit 
++	if(sc->data[SC_SPIRIT] && (sc->data[SC_SPIRIT]->val2 == SL_WIZARD || sc->data[SC_SPIRIT]->val2 == SL_SAGE))
++		vit += ((TBL_PC*)bl)->status.int_ / 5;
+ 	if(sc->data[SC_SPIRIT] && sc->data[SC_SPIRIT]->val2 == SL_HIGH && vit < 50)
+ 		vit = 50;
+ 
+@@ -5321,6 +5324,12 @@ static unsigned int status_calc_maxhp(struct block_list *bl, struct status_chang
+ 		maxhp += maxhp * sc->data[SC_MUSTLE_M]->val1 / 100;
+ 	if(sc->data[SC_INSPIRATION])//Snce it gives a percentage and fixed amount, should be last on percentage calculations list. [Rytech]
+ 		maxhp += maxhp * 5 * sc->data[SC_INSPIRATION]->val1 / 100 + 600 * sc->data[SC_INSPIRATION]->val1;
++	//Bonus Effect for Wizard & Sage Link 
++	if(sc->data[SC_SPIRIT] && (sc->data[SC_SPIRIT]->val2 == SL_WIZARD || sc->data[SC_SPIRIT]->val2 == SL_SAGE))
++		maxhp += ((TBL_PC*)bl)->status.base_level * 200;
++	//Bonus Effect For Super Novice & Baby Novice
++	if(sc->data[SC_SPIRIT] && (sc->data[SC_SPIRIT]->val2 == SL_SUPERNOVICE))
++		maxhp += ((TBL_PC*)bl)->status.base_level * 200;
+ 	if(sc->data[SC_MARIONETTE])
+ 		maxhp -= 1000;
+ 	if(sc->data[SC_VENOMBLEED])
+@@ -8912,6 +8921,11 @@ int status_change_start(struct block_list* bl,enum sc_type type,int rate,int val
+ 		case SC_RAISINGDRAGON:
+ 			sce->val2 = status->max_hp / 100;// Officially tested its 1%hp drain. [Jobbie]
+ 			break;
++		case SC_SPIRIT:
++			// This is _not_ the best way to do that ):
++			if( (sd->class_&MAPID_UPPERMASK) == MAPID_BLACKSMITH )
++				pc_skill(sd, KN_CHARGEATK, 1, 0);
++			break;
+ 	}
+ 
+ 	if( opt_flag&2 && sd && sd->touching_id )
+@@ -9425,6 +9439,11 @@ int status_change_end(struct block_list* bl, enum sc_type type, int tid)
+ 				}
+ 			}
+ 			break;
++		case SC_SPIRIT:
++			// This is _not_ the best way to do that ):
++			if(/* pc->checkskill(sd, KN_CHARGEATK) && */(sd->class_&MAPID_UPPERMASK) == MAPID_BLACKSMITH)
++				pc_skill(sd, KN_CHARGEATK, 0, 0);
++			break;
+ 		case SC_SATURDAYNIGHTFEVER:
+ 			sc_start(bl,SC_SITDOWN_FORCE,100,sce->val1,skill_get_time2(WM_SATURDAY_NIGHT_FEVER,sce->val1));
+ 			break;
