@@ -1,0 +1,127 @@
+ rewrite/doc/script_commands.txt | 32 +++++++++++++++++++++++++++++++-
+ rewrite/src/map/script.c        | 21 +++++++++++++++++++--
+ rewrite/src/map/script.h        |  1 +
+ 3 files changed, 51 insertions(+), 3 deletions(-)
+
+diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
+index db45581..a4a1812 100644
+--- a/rewrite/doc/script_commands.txt
++++ b/rewrite/doc/script_commands.txt
+@@ -4,7 +4,7 @@
+ //= A reference manual for the eAthena scripting language.
+ //= Commands are sorted depending on their functionality.
+ //===== Version ===========================================
+-//= 3.51.20130619
++//= 3.52.20161017
+ //=========================================================
+ //= 1.0 - First release, filled will as much info as I could
+ //=       remember or figure out, most likely there are errors,
+@@ -194,6 +194,8 @@
+ //= 3.51.20130619
+ //=       Added 'setdragon', 'checkdragon', 'setwug', 'checkwug', 
+ //=       'setwugrider', 'checkwugrider', 'setmadogear', 'checkmadogear'. [Rytech]
++//= 3.52.20161017
++//=		  Added 'freeloop'. [15peaces]
+ //=========================================================
+ 
+ This document is a reference manual for all the scripting commands and functions 
+@@ -2069,6 +2071,34 @@ Example 2: counter-controlled loop
+ 
+ ---------------------------------------
+ 
++*freeloop({<toggle>})
++
++Toggling this to enabled (1) allows the script instance to bypass the infinite loop 
++protection, allowing your script to loop as much as it may need. Disabling (0) will
++warn you if an infinite loop is detected.
++
++The command will return the state of freeloop for the attached script, even if no
++argument is provided.
++
++Example:
++	freeloop(1); // enable script to loop freely
++
++	// be careful with what you do here
++	for ( set .@i, 0; .@i < .@bigloop; set .@i,.@i+1 ) {
++		dothis;
++		// will sleep the script for 1ms when detect an infinity loop to 
++		// let rAthena do what it needs to do (socket, timer, process, etc.)
++	}
++
++	freeloop(0); // disable freeloop
++
++	for ( set .@i, 0; .@i < .@bigloop; set .@i,.@i+1 ) {
++		dothis;
++		// throw an infinity loop error
++	}
++
++---------------------------------------
++
+ *setarray <array name>[<first value>],<value>{,<value>...<value>};
+ 
+ This command will allow you to quickly fill up an array in one go. Check the 
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index 48ea068..1263193 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -3442,7 +3442,7 @@ void run_script_main(struct script_state *st)
+ 			run_func(st);
+ 			if(st->state==GOTO){
+ 				st->state = RUN;
+-				if( gotocount>0 && (--gotocount)<=0 ){
++				if( !st->freeloop && gotocount>0 && (--gotocount)<=0 ){
+ 					ShowError("run_script: infinity loop !\n");
+ 					script_reportsrc(st);
+ 					st->state=END;
+@@ -3490,7 +3490,7 @@ void run_script_main(struct script_state *st)
+ 			st->state=END;
+ 			break;
+ 		}
+-		if( cmdcount>0 && (--cmdcount)<=0 ){
++		if( !st->freeloop && cmdcount>0 && (--cmdcount)<=0 ){
+ 			ShowError("run_script: infinity loop !\n");
+ 			script_reportsrc(st);
+ 			st->state=END;
+@@ -15074,6 +15074,22 @@ BUILDIN_FUNC(opendressroom)
+ 	return 0;
+ }
+ 
++/**
++ * freeloop(<toggle>) -> toggles this script instance's looping-check ability
++ **/
++BUILDIN_FUNC(freeloop) {
++
++	if( script_hasdata(st,2) ) {
++		if( script_getnum(st,2) )
++			st->freeloop = 1;
++		else
++			st->freeloop = 0;
++	}
++
++	script_pushint(st, st->freeloop);
++	return 0;
++}
++
+ // declarations that were supposed to be exported from npc_chat.c
+ #ifdef PCRE_SUPPORT
+ BUILDIN_FUNC(defpattern);
+@@ -15489,6 +15505,7 @@ struct script_function buildin_func[] = {
+ 
+ 	// 3CeAM
+ 	BUILDIN_DEF(opendressroom,"?"),
++	BUILDIN_DEF(freeloop,"?"),
+ 
+ 	{NULL,NULL,NULL},
+ };
+diff --git a/rewrite/src/map/script.h b/rewrite/src/map/script.h
+index c272f2d..d332310 100644
+--- a/rewrite/src/map/script.h
++++ b/rewrite/src/map/script.h
+@@ -125,6 +125,7 @@ struct script_state {
+ 	//For backing up purposes
+ 	struct script_state *bk_st;
+ 	int bk_npcid;
++	unsigned freeloop : 1;// used by buildin_freeloop
+ };
+ 
+ struct script_reg {
