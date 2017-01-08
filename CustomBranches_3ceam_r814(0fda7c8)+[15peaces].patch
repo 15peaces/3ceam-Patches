@@ -1,0 +1,65 @@
+ rewrite/db/item_db_custom.txt    | 3 +++
+ rewrite/db/mob_branch_custom.txt | 7 +++++++
+ rewrite/src/map/mob.c            | 4 +++-
+ rewrite/src/map/mob.h            | 2 +-
+ 4 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/rewrite/db/item_db_custom.txt b/rewrite/db/item_db_custom.txt
+index 76858c7..28f5b8d 100644
+--- a/rewrite/db/item_db_custom.txt
++++ b/rewrite/db/item_db_custom.txt
+@@ -61,3 +61,6 @@
+ //==================================================================
+ //2338,Wedding_Dress,Wedding Dress,5,43000,,500,,0,,0,0xFFFFFFFE,7,0,16,,0,1,0,{},{ setoption Option_Wedding,1; },{ setoption Option_Wedding,0; }
+ //7170,Tuxedo,Tuxedo,5,43000,,10,,0,,0,0xFFFFFFFE,7,1,16,,0,1,0,{},{ setoption Option_Wedding,1; },{ setoption Option_Wedding,0; }
++
++// This item script uses mob_branch_custom.txt as a spawn set. [15peaces]
++30000,Custom_Dead_Branch,Monster Branch,2,10000,,200,,,,,0xFFFFFFFF,7,2,,,,,,{ monster "this",-1,-1,"--ja--",-5,1,""; },{},{}
+diff --git a/rewrite/db/mob_branch_custom.txt b/rewrite/db/mob_branch_custom.txt
+new file mode 100644
+index 0000000..48a9e9c
+--- /dev/null
++++ b/rewrite/db/mob_branch_custom.txt
+@@ -0,0 +1,7 @@
++// Custom Branch Summonable Monsters Database
++//
++// Structure of Database:
++// MobID,DummyName,Rate
++
++0,Poring,1002
++1001,Scorpion,214285
+diff --git a/rewrite/src/map/mob.c b/rewrite/src/map/mob.c
+index 366bc43..d9784a1 100644
+--- a/rewrite/src/map/mob.c
++++ b/rewrite/src/map/mob.c
+@@ -249,6 +249,7 @@ struct mob_data* mob_spawn_dataset(struct spawn_data *data)
+  * 0: dead branch list
+  * 1: poring list
+  * 2: bloody branch list
++ * 3: custom branch list [15peaces]
+  * flag:
+  * &1: Apply the summon success chance found in the list (otherwise get any monster from the db)
+  * &2: Apply a monster check level.
+@@ -3833,7 +3834,8 @@ static int mob_read_randommonster(void)
+ 		"mob_branch.txt",
+ 		"mob_poring.txt",
+ 		"mob_boss.txt",
+-		"mob_pouch.txt"};
++		"mob_pouch.txt",
++		"mob_branch_custom.txt"};
+ 
+ 	memset(&summon, 0, sizeof(summon));
+ 
+diff --git a/rewrite/src/map/mob.h b/rewrite/src/map/mob.h
+index 6f39074..34134e2 100644
+--- a/rewrite/src/map/mob.h
++++ b/rewrite/src/map/mob.h
+@@ -11,7 +11,7 @@
+ #include "unit.h" // unit_stop_walking(), unit_stop_attack()
+ 
+ 
+-#define MAX_RANDOMMONSTER 4
++#define MAX_RANDOMMONSTER 5
+ 
+ // Change this to increase the table size in your mob_db to accomodate a larger mob database.
+ // Be sure to note that IDs 4001 to 4048 are reserved for advanced/baby/expanded classes.
