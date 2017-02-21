@@ -1,0 +1,116 @@
+ rewrite/db/const.txt          | 2 ++
+ rewrite/db/item_db_custom.txt | 3 +++
+ rewrite/doc/item_bonus.txt    | 2 ++
+ rewrite/src/map/battle.c      | 1 +
+ rewrite/src/map/map.h         | 1 +
+ rewrite/src/map/pc.c          | 9 +++++++++
+ rewrite/src/map/pc.h          | 1 +
+ rewrite/src/map/status.c      | 1 +
+ 8 files changed, 20 insertions(+)
+
+diff --git a/rewrite/db/const.txt b/rewrite/db/const.txt
+index 4a40f51..a5511e8 100644
+--- a/rewrite/db/const.txt
++++ b/rewrite/db/const.txt
+@@ -621,6 +621,8 @@ bMagicSPGainValue	2043
+ bMagicHPGainValue	2044
+ bAddClassDropItem	2045
+ 
++bMagicAtkEle	2056
++
+ bFixedCastRate	2101
+ bAddMatk	2102
+ 
+diff --git a/rewrite/db/item_db_custom.txt b/rewrite/db/item_db_custom.txt
+index 76858c7..2a386f3 100644
+--- a/rewrite/db/item_db_custom.txt
++++ b/rewrite/db/item_db_custom.txt
+@@ -61,3 +61,6 @@
+ //==================================================================
+ //2338,Wedding_Dress,Wedding Dress,5,43000,,500,,0,,0,0xFFFFFFFE,7,0,16,,0,1,0,{},{ setoption Option_Wedding,1; },{ setoption Option_Wedding,0; }
+ //7170,Tuxedo,Tuxedo,5,43000,,10,,0,,0,0xFFFFFFFE,7,1,16,,0,1,0,{},{ setoption Option_Wedding,1; },{ setoption Option_Wedding,0; }
++
++//bMagicAtkEle testing
++2854,Alchemy_Glove,Alchemy Glove,5,20,,100,,1,,1,0xFFFFFFFE,63,2,136,,125,0,0,{ bonus bMdef,2; bonus bInt,1; bonus2 bMagicAtkEle,Ele_Fire,10; bonus2 bMagicAtkEle,Ele_Water,-20; bonus2 bSubEle,Ele_Water,-30; bonus3 bAutoSpell,"MG_FIREBALL",5,30; bonus5 bAutoSpell,"MG_FIREBOLT",5,30,BF_MAGIC,1; },{},{}
+\ No newline at end of file
+diff --git a/rewrite/doc/item_bonus.txt b/rewrite/doc/item_bonus.txt
+index 0cc16da..7a2ee1b 100644
+--- a/rewrite/doc/item_bonus.txt
++++ b/rewrite/doc/item_bonus.txt
+@@ -111,6 +111,8 @@ bonus bAtkEle,n;				Gives the player's attacks element n
+ 							n: 0=Neutral, 1=Water, 2=Earth, 3=Fire, 4=Wind, 5=Poison, 6=Holy, 7=Dark, 8=Spirit, 9=Undead
+ bonus bDefEle,n;				Gives the player's defense element n
+ 							n: 0=Neutral, 1=Water, 2=Earth, 3=Fire, 4=Wind, 5=Poison, 6=Holy, 7=Dark, 8=Spirit, 9=Undead
++bonus2 bMagicAtkEle,e,x;  		Increases damage of n element magic by x%
++							n: 0=Neutral, 1=Water, 2=Earth, 3=Fire, 4=Wind, 5=Poison, 6=Holy, 7=Dark, 8=Spirit, 9=Undead
+ bonus bSplashRange n;			Splash attack radius + n (e.g. n=1 makes a 3*3 cells area, n=2 a 5*5 area, etc)
+ 								Only the highest among all is applied
+ bonus bSplashAddRange n;		Splash attack radius + n (e.g. n=1 makes a 3*3 cells area, n=2 a 5*5 area, etc)
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index 6c75fc7..c68beda 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -4301,6 +4301,7 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list
+ 			cardfix=cardfix*(100+sd->magic_addrace[tstatus->race])/100;
+ 			if (!(nk&NK_NO_ELEFIX))
+ 				cardfix=cardfix*(100+sd->magic_addele[tstatus->def_ele])/100;
++			cardfix=cardfix*(100+sd->magic_atk_ele[s_ele])/100;
+ 			cardfix=cardfix*(100+sd->magic_addsize[tstatus->size])/100;
+ 			cardfix=cardfix*(100+sd->magic_addrace[is_boss(target)?RC_BOSS:RC_NONBOSS])/100;
+ 			for(i=0; i< ARRAYLENGTH(sd->add_mdmg) && sd->add_mdmg[i].rate;i++) {
+diff --git a/rewrite/src/map/map.h b/rewrite/src/map/map.h
+index 36a04cc..7fdd077 100644
+--- a/rewrite/src/map/map.h
++++ b/rewrite/src/map/map.h
+@@ -404,6 +404,7 @@ enum _sp {
+ 	SP_ADD_SKILL_BLOW, SP_SP_VANISH_RATE, SP_MAGIC_SP_GAIN_VALUE, SP_MAGIC_HP_GAIN_VALUE, SP_ADD_CLASS_DROP_ITEM, //2041-2045
+ 	
+ 	//3CeAM
++	SP_MAGIC_ATK_ELE = 2056, //2056
+ 	SP_FIXEDCASTRATE = 2101, //2101
+ 	SP_ADD_MATK, SP_BASETHIRD,SP_MAX_HAIR_DYE,SP_MAX_HAIR_STYLE,SP_MAX_BODY_DYE,SP_MAX_BODY_STYLE
+ };
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index 5c1bbac..fb3967b 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -2883,6 +2883,15 @@ int pc_bonus2(struct map_session_data *sd,int type,int type2,int val)
+ 		if(sd->state.lr_flag != 2)
+ 			sd->magic_addsize[type2]+=val;
+ 		break;
++	case SP_MAGIC_ATK_ELE: // bonus2 bMagicAtkEle,e,x;
++		if(type2 >= ELE_MAX)
++		{
++			ShowError("pc_bonus2: SP_MAGIC_ATK_ELE: Invalid element %d\n", type2);
++			break;
++		}
++		if(sd->state.lr_flag != 2)
++			sd->magic_atk_ele[type2]+=val;
++		break;
+ 	case SP_ADD_DAMAGE_CLASS:
+ 		switch (sd->state.lr_flag) {
+ 		case 0: //Right hand
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 29d1696..7919ae0 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -251,6 +251,7 @@ struct map_session_data {
+ 	int magic_addele[ELE_MAX];
+ 	int magic_addrace[RC_MAX];
+ 	int magic_addsize[3];
++	int magic_atk_ele[ELE_MAX];
+ 	int critaddrace[RC_MAX];
+ 	int expaddrace[RC_MAX];
+ 	int ignore_mdef[RC_MAX];
+diff --git a/rewrite/src/map/status.c b/rewrite/src/map/status.c
+index 8bc79f1..f284e50 100644
+--- a/rewrite/src/map/status.c
++++ b/rewrite/src/map/status.c
+@@ -2357,6 +2357,7 @@ int status_calc_pc_(struct map_session_data* sd, bool first)
+ 		+ sizeof(sd->magic_addele)
+ 		+ sizeof(sd->magic_addrace)
+ 		+ sizeof(sd->magic_addsize)
++		+ sizeof(sd->magic_atk_ele)
+ 		+ sizeof(sd->critaddrace)
+ 		+ sizeof(sd->expaddrace)
+ 		+ sizeof(sd->ignore_mdef)
