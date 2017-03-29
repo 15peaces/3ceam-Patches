@@ -18,7 +18,7 @@ index ae1c00b..23dfd0b 100644
 +//Make sure nodelay grf user still follow the rules
 +//Even the nodelay GRF doesn't work on 2013 client
 +//i suggest to use this feature.[Kichi] (Note 1)
-+sec_nodelay_protect: on
++nodelay_protect: on
 diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
 index 6825284..3ac1e3b 100644
 --- a/rewrite/src/map/battle.c
