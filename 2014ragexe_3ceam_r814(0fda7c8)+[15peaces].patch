@@ -1,0 +1,3105 @@
+ rewrite/conf/atcommand_athena.conf                 |   1 +
+ rewrite/conf/battle/client.conf                    |  10 +-
+ rewrite/conf/battle/feature.conf                   |   4 +
+ rewrite/conf/inter_athena.conf                     |   1 +
+ rewrite/conf/log_athena.conf                       |   1 +
+ rewrite/conf/msg_athena.conf                       |   4 +
+ rewrite/db/const.txt                               |   3 +
+ rewrite/db/item_db.txt                             |   6 +-
+ rewrite/db/packet_db.txt                           | 135 ++++-
+ rewrite/doc/script_commands.txt                    |  14 +
+ .../sql-files/3CeAM_2014client_patch[15peaces].sql |  65 +++
+ .../3CeAM_2014client_patch_log[15peaces].sql       |   1 +
+ rewrite/sql-files/main.sql                         |  68 +++
+ rewrite/src/char/char.c                            |  36 +-
+ rewrite/src/char/char.h                            |   2 +
+ rewrite/src/char_sql/char.c                        | 566 ++++++++++++---------
+ rewrite/src/char_sql/char.h                        |   3 +
+ rewrite/src/common/mmo.h                           |  46 +-
+ rewrite/src/map/atcommand.c                        |  46 +-
+ rewrite/src/map/battle.c                           |  10 +-
+ rewrite/src/map/battle.h                           |   1 +
+ rewrite/src/map/buyingstore.c                      |   2 +-
+ rewrite/src/map/chrif.c                            |  12 +-
+ rewrite/src/map/chrif.h                            |   2 +-
+ rewrite/src/map/clif.c                             | 530 +++++++++++++++----
+ rewrite/src/map/clif.h                             |  62 ++-
+ rewrite/src/map/itemdb.c                           | 123 +++++
+ rewrite/src/map/itemdb.h                           |  18 +
+ rewrite/src/map/log.h                              |   2 +
+ rewrite/src/map/map.c                              |   4 +
+ rewrite/src/map/map.h                              |   4 +
+ rewrite/src/map/mob.c                              |   2 +-
+ rewrite/src/map/pc.c                               |  87 ++--
+ rewrite/src/map/pc.h                               |  15 +
+ rewrite/src/map/quest.c                            |   2 +
+ rewrite/src/map/script.c                           |  64 ++-
+ rewrite/src/map/skill.c                            |   2 +-
+ rewrite/src/map/status.c                           |   2 +-
+ rewrite/src/map/status.h                           |  41 --
+ rewrite/src/map/vending.c                          |   6 +-
+ 40 files changed, 1519 insertions(+), 484 deletions(-)
+
+diff --git a/rewrite/conf/atcommand_athena.conf b/rewrite/conf/atcommand_athena.conf
+index 9e2d867..12aba4f 100644
+--- a/rewrite/conf/atcommand_athena.conf
++++ b/rewrite/conf/atcommand_athena.conf
+@@ -505,6 +505,7 @@ joblvlup: 60,60
+ 
+ // Changes the sex of yourself
+ changesex: 60,60
++changecharsex: 60,60
+ 
+ // Levels your guild to specified level (2 same commands).
+ glvl: 60,60
+diff --git a/rewrite/conf/battle/client.conf b/rewrite/conf/battle/client.conf
+index c26a664..4a89945 100644
+--- a/rewrite/conf/battle/client.conf
++++ b/rewrite/conf/battle/client.conf
+@@ -44,10 +44,12 @@
+ // 0x080000: 2011-11-22aRagexeRE (version 28)
+ // 0x100000: 2012-04-10aRagexeRE (version 29)
+ // 0x200000: 2013-12-23cRagexe (version 30)
+-// 0x400000: 2015-05-13aRagexe (version 31)
+-// 0x800000: 2015-10-29aRagexe (version 32)
+-// 0x1000000: 2016-02-03aRagexeRE (version 33)
+-// 0x2000000: 2016-12-07eRagexeRE (version 34)
++// 0x400000: 2014-10-16 Ragexe (version 31)
++// 0x800000: 2014-10-22bRagexe (version 32)
++// 0x1000000: 2015-05-13aRagexe (version 33)
++// 0x2000000: 2015-10-29aRagexe (version 34)
++// 0x4000000: 2016-02-03aRagexeRE (version 35)
++// 0x8000000: 2016-12-07eRagexeRE (version 36)
+ // default value: 0xFFFFFFFF (all clients)
+ packet_ver_flag: 0x7FFFFFFF
+ 
+diff --git a/rewrite/conf/battle/feature.conf b/rewrite/conf/battle/feature.conf
+index ae1c00b..fb28887 100644
+--- a/rewrite/conf/battle/feature.conf
++++ b/rewrite/conf/battle/feature.conf
+@@ -26,3 +26,7 @@ feature.buying_store: on
+ // Search stores (Note 1)
+ // Requires: 2010-08-03aRagexeRE or later
+ feature.search_stores: on
++
++// Roulette (Note 1)
++// Requires: 2014-10-22bRagexe or later
++feature.roulette: off
+diff --git a/rewrite/conf/inter_athena.conf b/rewrite/conf/inter_athena.conf
+index 5af2b4d..cdda11e 100644
+--- a/rewrite/conf/inter_athena.conf
++++ b/rewrite/conf/inter_athena.conf
+@@ -130,6 +130,7 @@ mob_db_db: mob_db
+ mob_db_3ceam_db: mob_db_3ceam
+ mob_db_custom_db: mob_db_custom
+ mapreg_db: mapreg
++db_roulette_table: db_roulette
+ 
+ //Use SQL item_db and mob_db for the map server
+ use_sql_db: no
+diff --git a/rewrite/conf/log_athena.conf b/rewrite/conf/log_athena.conf
+index 0d5378a..b02648e 100644
+--- a/rewrite/conf/log_athena.conf
++++ b/rewrite/conf/log_athena.conf
+@@ -17,6 +17,7 @@
+ // 4096 - (G) Log items placed/retrieved from guild storage.
+ // 8192 - (E) Log mail system transactions.
+ // 16384 - (B) Log buying store transactions
++// 32768 - (Y) Roulette Lottery 
+ // Example: Log trades+vending+script items+created items: 2+4+64+1024 = 1094
+ enable_logs: 1
+ 
+diff --git a/rewrite/conf/msg_athena.conf b/rewrite/conf/msg_athena.conf
+index 74bec1c..6dd3577 100644
+--- a/rewrite/conf/msg_athena.conf
++++ b/rewrite/conf/msg_athena.conf
+@@ -613,5 +613,9 @@
+ 725: Your already have a cart.
+ 726: You can't have a cart with your current job.
+ 
++//Leaving space to avoid conflicts...
++// Roulette [15peaces]
++800: Roulette is disabled
++
+ //Custom translations
+ import: conf/import/msg_conf.txt
+diff --git a/rewrite/db/const.txt b/rewrite/db/const.txt
+index 4a40f51..26abe02 100644
+--- a/rewrite/db/const.txt
++++ b/rewrite/db/const.txt
+@@ -457,6 +457,9 @@ MaxHairDye	2104	1
+ MaxHairStyle	2105	1
+ MaxBodyDye	2106	1
+ MaxBodyStyle	2107	1
++RouletteBronze	123	1
++RouletteSilver	124	1
++RouletteGold	125	1
+ 
+ bMaxHP	6
+ bMaxSP	8
+diff --git a/rewrite/db/item_db.txt b/rewrite/db/item_db.txt
+index da420f2..585c491 100644
+--- a/rewrite/db/item_db.txt
++++ b/rewrite/db/item_db.txt
+@@ -164,11 +164,11 @@
+ 668,Handsei,Red Envelope,2,0,,20,,,,,0xFFFFFFFF,7,2,,,,,,{ set Zeny,Zeny+rand(1000,10000); },{},{}
+ 669,Rice_Cake_Soup,Tempting Rice-Cake Soup,0,500,,100,,,,,0xFFFFFFFF,7,2,,,,,,{ percentheal -100,-100; },{},{}
+ 670,Gold_Coin_Moneybag,Bag of Gold Coins,3,100000,,400,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
+-671,Gold_Coin,Gold Coin,3,10000,,40,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
++671,Gold_Coin,Gold Coin,2,10000,,0,,,,,0xFFFFFFFF,63,2,,,,,,{ set RouletteGold,RouletteGold+1; },{},{} 
+ 672,Copper_Coin_Moneybag,Bag of Bronze Coins,3,1000,,400,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
+-673,Copper_Coin,Bronze Coin,3,100,,40,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
++673,Copper_Coin,Bronze Coin,2,100,,40,,,,,0xFFFFFFFF,63,2,,,,,,{ set RouletteBronze,RouletteBronze+1; },{},{} 
+ 674,Mithril_Coin,Mithril Coin,3,5000,,40,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
+-675,Silver_Coin,Silver Coin,3,5000,,40,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
++675,Silver_Coin,Silver Coin,2,5000,,0,,,,,0xFFFFFFFF,63,2,,,,,,{set RouletteSilver,RouletteSilver+1; },{},{} 
+ 676,Silver_Coin_Moneybag,Bag of Silver Coins,3,50000,,400,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
+ 677,White_Gold_Coin,Platinum Coin,3,2000,,40,,,,,0xFFFFFFFF,7,2,,,,,,{},{},{}
+ 678,Poison_Bottle,Poison Bottle,2,5000,,100,,,,,0xFFFFFFFF,7,2,,,,,,{ if(Class == Job_Assassin_Cross || BaseThird == Job_Guillotine_Cross) { sc_start SC_DPoison,60000,0; sc_start SC_ASPDPOTION2,60000,0; } else percentheal -100,-100; },{},{}
+diff --git a/rewrite/db/packet_db.txt b/rewrite/db/packet_db.txt
+index 67f32df..2cec1c3 100644
+--- a/rewrite/db/packet_db.txt
++++ b/rewrite/db/packet_db.txt
+@@ -1707,6 +1707,11 @@ packet_ver: 28
+ 0x080b,6
+ 0x0908,5
+ 
++// New Packet
++0x090F,-1		// ZC_NOTIFY_NEWENTRY7
++0x0914,-1		// ZC_NOTIFY_MOVEENTRY8
++0x0915,-1		// ZC_NOTIFY_STANDENTRY9
++
+ //2012-04-10aRagexeRE
+ packet_ver: 29
+ 0x01FD,15,repairitem,2
+@@ -1799,6 +1804,103 @@ packet_ver: 30
+ 0x0361,5,hommenu,4
+ 0x08a4,36,storagepassword,0
+ 
++//2014-10-16Ragexe
++packet_ver: 31
++0x0369,7,actionrequest,2:6
++0x083C,10,useskilltoid,2:4:6
++0x0437,5,walktoxy,2
++0x035F,6,ticksend,2
++0x0967,5,changedir,2:4
++0x07E4,6,takeitem,2
++0x0362,6,dropitem,2:4
++0x07EC,8,movetokafra,2:4
++0x022D,8,movefromkafra,2:4
++0x0438,10,useskilltopos,2:4:6:8
++0x0366,90,useskilltoposinfo,2:4:6:8:10
++0x096A,6,getcharnamerequest,2
++0x0368,6,solvecharname,2
++0x0838,12,searchstoreinfolistitemclick,2:6:10
++0x0835,2,searchstoreinfonextpage,0
++0x0819,-1,searchstoreinfo,2:4:5:9:13:14:15
++0x0811,-1,reqtradebuyingstore,2:4:8:12
++0x0360,6,reqclickbuyingstore,2
++0x0817,2,reqclosebuyingstore,0
++0x0815,-1,reqopenbuyingstore,2:4:8:9:89
++0x0365,18,bookingregreq,2:4
++// 0x0363,8 // CZ_JOIN_BATTLE_FIELD
++0x0281,-1,itemlistwindowselected,2:4:8
++0x086E,19,wanttoconnection,2:6:10:14:18
++0x0802,26,partyinvite,2
++// 0x0922,4 // CZ_GANGSI_RANK
++0x094B,26,friendslistadd,2
++0x0364,5,hommenu,2:4
++0x0936,36,storagepassword,0
++0x09DF,7
++
++// New packets
++0x0A00,269		// ZC_SHORTCUT_KEY_LIST_V3
++0x0A01,3,hotkeyrowshift,2	// CZ_SHORTCUTKEYBAR_ROTATE
++0x0A02,4		// ZC_DRESSROOM_OPEN
++0x09F7,75		// ZC_PROPERTY_HOMUN_2
++0x09E5,18		// ZC_DELETEITEM_FROM_MCSTORE2
++0x09E6,22		// ZC_UPDATE_ITEM_FROM_BUYING_STORE2
++
++//2014-10-22bRagexe
++packet_ver: 32
++0x006d,149
++0x023b,10,useskilltopos,2:4:6:8
++0x0281,-1,itemlistwindowselected,2:4:8:12
++0x035f,6,ticksend,2
++0x0360,6,reqclickbuyingstore,2
++0x0366,90,useskilltoposinfo,2:4:6:8:10
++0x0368,6,solvecharname,2
++0x0369,7,actionrequest,2:6
++0x0437,5,walktoxy,2
++0x0438,36,storagepassword,2:4:20
++0x0811,-1,reqtradebuyingstore,2:4:8:12
++0x0815,-1,reqopenbuyingstore,2:4:8:9:89
++0x0817,2,reqclosebuyingstore,0
++0x0819,-1,searchstoreinfo,2:4:5:9:13:14:15
++0x0835,12,searchstoreinfolistitemclick,2:6:10
++0x083c,10,useskilltoid,2:4:6
++0x0878,8,movetokafra,2:4
++0x087d,6,dropitem,2:4
++0x0896,26,partyinvite2,2
++0x0899,5,hommenu,2:4
++0x08aa,8,movefromkafra,2:4
++//0x08ab,4	// CZ_GANGSI_RANK
++0x08ad,5,changedir,2:4
++0x08e3,149
++0x091a,26,friendslistadd,2
++//0x092b,8	// CZ_JOIN_BATTLE_FIELD
++0x093b,19,wanttoconnection,2:6:10:14:18
++0x0940,2,searchstoreinfonextpage,0
++0x094e,6,takeitem,2
++0x0955,18,bookingregreq,2:4:6
++0x096a,6,getcharnamerequest,2
++0x09e7,3
++0x09e8,11
++0x09ea,11
++0x09eb,-1
++0x09ed,3
++0x09ee,11
++0x09f1,11
++0x09f2,12
++0x09f3,11
++0x09f9,143
++0x0a03,2
++0x0a04,6
++0x0a05,49
++0x0a06,6
++0x0a07,9
++0x0a08,26
++0x0a09,45//ZC_ADD_EXCHANGE_ITEM3
++0x0a0a,47//ZC_ADD_ITEM_TO_STORE3
++0x0a0b,47//ZC_ADD_ITEM_TO_CART3
++0x0a0c,56//ZC_ITEM_PICKUP_ACK_V6
++0x0a0d,-1//ZC_INVENTORY_ITEMLIST_EQUIP_V6
++0x0a13,26
++
+ // New Packets
+ 0x08c8,34//ZC_NOTIFY_ACT3
+ 0x08ff,24 // ZC_EFST_SET_ENTER
+@@ -1828,6 +1930,12 @@ packet_ver: 30
+ 0x09dc,-1//ZC_NOTIFY_NEWENTRY10
+ 0x09dd,-1//ZC_NOTIFY_STANDENTRY10
+ 0x09df,7//ZC_ACK_WHISPER02
++//0x09F8,-1// ZC_ALL_QUEST_LIST3
++0x09FD,-1// ZC_NOTIFY_MOVEENTRY11
++0x09FE,-1// ZC_NOTIFY_NEWENTRY11
++0x09FF,-1// ZC_NOTIFY_STANDENTRY11
++0x0A18,14// ZC_ACCEPT_ENTER3
++0x0A28,3// ZC_ACK_OPENSTORE2
+ 
+ // Disconnect Prevent
+ 0x0447,2 //CZ_BLOCKING_PLAY_CANCEL
+@@ -1841,7 +1949,7 @@ packet_ver: 30
+ 0x0848,-1,cashshopbuy,2
+ 
+ //2015-05-13aRagexe
+-packet_ver: 31
++packet_ver: 33
+ 0x0369,7,actionrequest,2:6
+ 0x083c,10,useskilltoid,2:4:6
+ 0x0437,5,walktoxy,2
+@@ -1874,35 +1982,18 @@ packet_ver: 31
+ 
+ // New Packets
+ 0x097a,-1//ZC_ALL_QUEST_LIST2
+-//0x09f8,-1//ZC_ALL_QUEST_LIST3
+ 
+ 0x09e8,12//CZ_OPEN_MAILBOX
+ 
+-0x09f7,75//ZC_PROPERTY_HOMUN_2
+-
+-0x09fd,-1//ZC_NOTIFY_MOVEENTRY11
+-0x09fe,-1//ZC_NOTIFY_NEWENTRY11
+-0x09ff,-1//ZC_NOTIFY_STANDENTRY11
+-
+-0x0a02,4//ZC_DRESSROOM_OPEN
+-
+-0x0a09,45//ZC_ADD_EXCHANGE_ITEM3
+-0x0a0a,47//ZC_ADD_ITEM_TO_STORE3
+-0x0a0b,47//ZC_ADD_ITEM_TO_CART3
+-
+-0x0a0c,56//ZC_ITEM_PICKUP_ACK_V6
+-0x0a0d,-1//ZC_INVENTORY_ITEMLIST_EQUIP_V6
+-
+ 0x0a0f,-1//ZC_CART_ITEMLIST_EQUIP_V6
+ 0x0a10,-1//ZC_STORE_ITEMLIST_EQUIP_V6
+ 
+ 0x0a27,8//ZC_RECOVERY2
+-0x0a28,3//ZC_ACK_OPENSTORE2
+ 
+ 0x0a2e,6//CZ_REQ_CHANGE_TITLE
+ 
+ //2015-10-29aRagexe
+-packet_ver: 32
++packet_ver: 34
+ 0x0369,7,actionrequest,2:6
+ 0x083c,10,useskilltoid,2:4:6
+ 0x0437,5,walktoxy,2
+@@ -1934,7 +2025,7 @@ packet_ver: 32
+ 0x0860,36,storagepassword,0
+ 
+ //2016-02-03aRagexeRE
+-packet_ver: 33
++packet_ver: 35
+ 0x0369,7,actionrequest,2:6
+ 0x083C,10,useskilltoid,2:4:6
+ 0x0940,5,walktoxy,2
+@@ -1971,7 +2062,7 @@ packet_ver: 33
+ 0x0a48,2//
+ 
+ //2016-12-07eRagexeRE
+-packet_ver: 34
++packet_ver: 36
+ 0x0886,7,actionrequest,2:6
+ 0x083C,10,useskilltoid,2:4:6
+ 0x0437,5,walktoxy,2
+@@ -2003,4 +2094,4 @@ packet_ver: 34
+ 0x095D,36,storagepassword,0
+ 
+ //Add new packets here.
+-//packet_ver: 35
+\ No newline at end of file
++//packet_ver: 37
+\ No newline at end of file
+diff --git a/rewrite/doc/script_commands.txt b/rewrite/doc/script_commands.txt
+index db45581..8f159a9 100644
+--- a/rewrite/doc/script_commands.txt
++++ b/rewrite/doc/script_commands.txt
+@@ -4022,6 +4022,20 @@ they will also have their skills reset upon 'changesex'.
+ 
+ ---------------------------------------
+ 
++*changecharsex({<char_id>});
++
++This command will change the gender of the attached character. If it 
++was male, it will become female, if it was female, it will become male. The 
++change will be written to the character server, the player will receive the 
++message: "Need disconnection to perform change-sex request..." and the player 
++will be immediately kicked to the login screen. When they log back in, they will 
++be the opposite sex.
++
++If the character being changed is a Dancer/Gypsy or Bard/Clown class type, 
++the character will also have their skills reset upon 'changecharsex'.
++
++---------------------------------------
++
+ *getexp <base xp>,<job xp>;
+ 
+ This command will give the invoking character a specified number of base and job 
+diff --git a/rewrite/sql-files/3CeAM_2014client_patch[15peaces].sql b/rewrite/sql-files/3CeAM_2014client_patch[15peaces].sql
+new file mode 100644
+index 0000000..039282f
+--- /dev/null
++++ b/rewrite/sql-files/3CeAM_2014client_patch[15peaces].sql
+@@ -0,0 +1,65 @@
++ALTER TABLE  `char` ADD COLUMN `sex` ENUM('M','F','U') NOT NULL default 'U';
++ALTER TABLE `char` ADD COLUMN `hotkey_rowshift` TINYINT(3) UNSIGNED NOT NULL DEFAULT  '0';
++
++CREATE TABLE `db_roulette` (
++  `index` int(11) NOT NULL default '0',
++  `level` smallint(5) unsigned NOT NULL,
++  `item_id` smallint(5) unsigned NOT NULL,
++  `amount` smallint(5) unsigned NOT NULL DEFAULT '1',
++  `flag` smallint(5) unsigned NOT NULL DEFAULT '1',
++  PRIMARY KEY (`index`)
++) ENGINE=MyISAM;
++
++-- ----------------------------
++-- Records of db_roulette
++-- ----------------------------
++-- Info: http://ro.gnjoy.com/news/update/View.asp?seq=157&curpage=1
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 0, 1, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 1, 1, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 2, 1, 678, 1, 0 ); -- Poison_Bottle
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 3, 1, 604, 1, 0 ); -- Branch_Of_Dead_Tree
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 4, 1, 522, 1, 0 ); -- Fruit_Of_Mastela
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 5, 1, 671, 1, 0 ); -- Old_Ore_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 6, 1, 12523, 1, 0 ); -- E_Inc_Agi_10_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 7, 1, 985, 1, 0 ); -- Elunium
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 8, 1, 984, 1, 0 ); -- Oridecon
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 9, 2, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 10, 2, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 11, 2, 603, 1, 0 ); -- Old_Blue_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 12, 2, 608, 1, 0 ); -- Seed_Of_Yggdrasil
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 13, 2, 607, 1, 0 ); -- Yggdrasilberry
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 14, 2, 12522, 1, 0 ); -- E_Blessing_10_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 15, 2, 6223, 1, 0 ); -- Carnium
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 16, 2, 6224, 1, 0 ); -- Bradium
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 17, 3, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 18, 3, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 19, 3, 12108, 1, 0 ); -- Bundle_Of_Magic_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 20, 3, 617, 1, 0 ); -- Old_Violet_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 21, 3, 12514, 1, 0 ); -- E_Abrasive
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 22, 3, 7444, 1, 0 ); -- Treasure_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 23, 3, 969, 1, 0 ); -- Gold
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 24, 4, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 25, 4, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 26, 4, 616, 1, 0 ); -- Old_Card_Album
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 27, 4, 12516, 1, 0 ); -- E_Small_Life_Potion
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 28, 4, 22777, 1, 0 ); -- Gift_Buff_Set
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 29, 4, 6231, 1, 0 ); -- Guarantee_Weapon_6Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 30, 5, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 31, 5, 12246, 1, 0 ); -- Magic_Card_Album
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 32, 5, 12263, 1, 0 ); -- Comp_Battle_Manual
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 33, 5, 671, 1, 0 ); -- Potion_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 34, 5, 6235, 1, 0 ); -- Guarantee_Armor_6Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 35, 6, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 36, 6, 12766, 1, 0 ); -- Reward_Job_BM25
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 37, 6, 6234, 1, 0 ); -- Guarantee_Armor_7Up
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 38, 6, 6233, 1, 0 ); -- Guarantee_Armor_8Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 39, 7, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 40, 7, 6233, 1, 0 ); -- Guarantee_Armor_8Up
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 41, 7, 6233, 1, 0 ); -- Guarantee_Armor_8Up	// KRO lists this twice
+diff --git a/rewrite/sql-files/3CeAM_2014client_patch_log[15peaces].sql b/rewrite/sql-files/3CeAM_2014client_patch_log[15peaces].sql
+new file mode 100644
+index 0000000..c463f18
+--- /dev/null
++++ b/rewrite/sql-files/3CeAM_2014client_patch_log[15peaces].sql
+@@ -0,0 +1 @@
++ALTER TABLE `picklog` MODIFY `type` enum('M','P','L','T','V','S','N','C','A','R','G','E','B','Y') NOT NULL default 'P';
+diff --git a/rewrite/sql-files/main.sql b/rewrite/sql-files/main.sql
+index 6d30b78..6feb933 100644
+--- a/rewrite/sql-files/main.sql
++++ b/rewrite/sql-files/main.sql
+@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS `char` (
+   `fame` int(11) unsigned NOT NULL default '0',
+   `rename` SMALLINT(3) unsigned NOT NULL default '0',
+   `delete_date` INT(11) UNSIGNED NOT NULL DEFAULT '0',
++  `sex` ENUM('M','F','U') NOT NULL default 'U',
++  `hotkey_rowshift` TINYINT(3) UNSIGNED NOT NULL DEFAULT '0',
+   PRIMARY KEY  (`char_id`),
+   KEY `account_id` (`account_id`),
+   KEY `party_id` (`party_id`),
+@@ -673,3 +675,69 @@ CREATE TABLE IF NOT EXISTS `storage` (
+   PRIMARY KEY  (`id`),
+   KEY `account_id` (`account_id`)
+ ) ENGINE=MyISAM;
++
++--
++-- Table structure for `db_roulette`
++--
++CREATE TABLE `db_roulette` (
++  `index` int(11) NOT NULL default '0',
++  `level` smallint(5) unsigned NOT NULL,
++  `item_id` smallint(5) unsigned NOT NULL,
++  `amount` smallint(5) unsigned NOT NULL DEFAULT '1',
++  `flag` smallint(5) unsigned NOT NULL DEFAULT '1',
++  PRIMARY KEY (`index`)
++) ENGINE=MyISAM;
++
++-- ----------------------------
++-- Records of db_roulette
++-- ----------------------------
++-- Info: http://ro.gnjoy.com/news/update/View.asp?seq=157&curpage=1
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 0, 1, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 1, 1, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 2, 1, 678, 1, 0 ); -- Poison_Bottle
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 3, 1, 604, 1, 0 ); -- Branch_Of_Dead_Tree
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 4, 1, 522, 1, 0 ); -- Fruit_Of_Mastela
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 5, 1, 671, 1, 0 ); -- Old_Ore_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 6, 1, 12523, 1, 0 ); -- E_Inc_Agi_10_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 7, 1, 985, 1, 0 ); -- Elunium
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 8, 1, 984, 1, 0 ); -- Oridecon
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 9, 2, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 10, 2, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 11, 2, 603, 1, 0 ); -- Old_Blue_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 12, 2, 608, 1, 0 ); -- Seed_Of_Yggdrasil
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 13, 2, 607, 1, 0 ); -- Yggdrasilberry
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 14, 2, 12522, 1, 0 ); -- E_Blessing_10_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 15, 2, 6223, 1, 0 ); -- Carnium
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 16, 2, 6224, 1, 0 ); -- Bradium
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 17, 3, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 18, 3, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 19, 3, 12108, 1, 0 ); -- Bundle_Of_Magic_Scroll
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 20, 3, 617, 1, 0 ); -- Old_Violet_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 21, 3, 12514, 1, 0 ); -- E_Abrasive
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 22, 3, 7444, 1, 0 ); -- Treasure_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 23, 3, 969, 1, 0 ); -- Gold
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 24, 4, 675, 1, 1 ); -- Silver_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 25, 4, 671, 1, 0 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 26, 4, 616, 1, 0 ); -- Old_Card_Album
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 27, 4, 12516, 1, 0 ); -- E_Small_Life_Potion
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 28, 4, 22777, 1, 0 ); -- Gift_Buff_Set
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 29, 4, 6231, 1, 0 ); -- Guarantee_Weapon_6Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 30, 5, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 31, 5, 12246, 1, 0 ); -- Magic_Card_Album
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 32, 5, 12263, 1, 0 ); -- Comp_Battle_Manual
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 33, 5, 671, 1, 0 ); -- Potion_Box
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 34, 5, 6235, 1, 0 ); -- Guarantee_Armor_6Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 35, 6, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 36, 6, 12766, 1, 0 ); -- Reward_Job_BM25
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 37, 6, 6234, 1, 0 ); -- Guarantee_Armor_7Up
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 38, 6, 6233, 1, 0 ); -- Guarantee_Armor_8Up
++
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 39, 7, 671, 1, 1 ); -- Gold_Coin
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 40, 7, 6233, 1, 0 ); -- Guarantee_Armor_8Up
++INSERT INTO `db_roulette`(`index`, `level`, `item_id`, `amount`, `flag` ) VALUES ( 41, 7, 6233, 1, 0 ); -- Guarantee_Armor_8Up	// KRO lists this twice
+diff --git a/rewrite/src/char/char.c b/rewrite/src/char/char.c
+index 0030142..32e9ac6 100644
+--- a/rewrite/src/char/char.c
++++ b/rewrite/src/char/char.c
+@@ -1942,7 +1942,7 @@ int count_users(void)
+ // Writes char data to the buffer in the format used by the client.
+ // Used in packets 0x6b (chars info) and 0x6d (new char info)
+ // Returns the size
+-#define MAX_CHAR_BUF 147 //Max size (for WFIFOHEAD calls)
++#define MAX_CHAR_BUF 150 //Max size (for WFIFOHEAD calls)
+ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ {
+ 	unsigned short offset = 0;
+@@ -1977,12 +1977,16 @@ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ 	WBUFW(buf,50) = DEFAULT_WALK_SPEED; // p->speed;
+ 	WBUFW(buf,52) = p->class_;
+ 	WBUFW(buf,54) = p->hair;
+-#if PACKETVER >= 20150513
+-	WBUFW(buf,56) = p->body;// body
++#if PACKETVER >= 20141022
++	WBUFW(buf,56) = p->body; // Body Style
+ 	offset+=2;
+ 	buf = WBUFP(buffer,offset);
+ #endif
+-	WBUFW(buf,56) = p->option&0x7E80020 ? 0 : p->weapon; //When the weapon is sent and your option is riding, the client crashes on login!?
++
++	//When the weapon is sent and your option is riding, the client crashes on login!?
++	// FIXME[Haru]: is OPTION_HANBOK intended to be part of this list? And if it is, should the list also include other OPTION_ costumes?
++	WBUFW(buf,56) = (p->option&(OPTION_RIDING|OPTION_DRAGON|OPTION_WUG|OPTION_WUGRIDER|OPTION_MADOGEAR|OPTION_HANBOK)) ? 0 : p->weapon;
++
+ 	WBUFW(buf,58) = p->base_level;
+ 	WBUFW(buf,60) = min(p->skill_point, SHRT_MAX);
+ 	WBUFW(buf,62) = p->head_bottom;
+@@ -2015,14 +2019,19 @@ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ 	WBUFL(buf,128) = p->robe;
+ 	offset += 4;
+ #endif
+-#if PACKETVER >= 20110928
+-	WBUFL(buf,132) = 0;  // change slot feature (0 = disabled, otherwise enabled)
+-	offset += 4;
+-#endif
+-#if PACKETVER >= 20111025
+-	WBUFL(buf,136) = 0;  // unknown purpose (0 = disabled, otherwise displays "Add-Ons" sidebar)
+-	offset += 4;
+-#endif
++#if PACKETVER != 20111116 //2011-11-16 wants 136, ask gravity.
++	#if PACKETVER >= 20110928
++		WBUFL(buf,132) = 0;  // change slot feature (0 = disabled, otherwise enabled)
++		offset += 4;
++	#endif
++	#if PACKETVER >= 20111025
++		WBUFL(buf,136) = ( p->rename > 0 ) ? 1 : 0;  // (0 = disabled, otherwise displays "Add-Ons" sidebar)
++		offset += 4;
++	#endif
++	#if PACKETVER >= 20141016
++		WBUFB(buf,140) = p->sex;// sex - (0 = female, 1 = male, 99 = logindefined)
++		offset += 1;
++	#endif
+ #if PACKETVER >= 20150513
+ 	WBUFB(buf,140) = 99;// Character's sex. (0 = Female, 1 = Male, 99 = Undefined)
+ 	offset += 1;
+@@ -3406,7 +3415,8 @@ int parse_frommap(int fd)
+ 				node->sex == sex /*&&
+ 				node->ip == ip*/ )
+ 			{// auth ok
+-				cd->sex = sex;
++				if (cd->sex == 99)
++					cd->sex = sex;
+ 
+ 				WFIFOHEAD(fd,24 + sizeof(struct mmo_charstatus));
+ 				WFIFOW(fd,0) = 0x2afd;
+diff --git a/rewrite/src/char/char.h b/rewrite/src/char/char.h
+index 18bb7b1..fe99d5c 100644
+--- a/rewrite/src/char/char.h
++++ b/rewrite/src/char/char.h
+@@ -49,4 +49,6 @@ int char_config_read(const char *cfgName);
+ int mmo_char_fromstr(char *str, struct mmo_charstatus *p, struct global_reg *reg, int *reg_num);
+ int parse_friend_txt(struct mmo_charstatus *p);
+ 
++int char_mmo_gender(const struct char_session_data *sd, const struct mmo_charstatus *p, char sex); 
++
+ #endif /* _CHAR_H_ */
+diff --git a/rewrite/src/char_sql/char.c b/rewrite/src/char_sql/char.c
+index 9e7b8c4..8ea1de2 100644
+--- a/rewrite/src/char_sql/char.c
++++ b/rewrite/src/char_sql/char.c
+@@ -479,7 +479,7 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ 		(p->pet_id != cp->pet_id) || (p->weapon != cp->weapon) || (p->hom_id != cp->hom_id) ||
+ 		(p->ele_id != cp->ele_id) || (p->shield != cp->shield) || (p->head_top != cp->head_top) ||
+ 		(p->head_mid != cp->head_mid) || (p->head_bottom != cp->head_bottom) || (p->robe != cp->robe) || 
+-		(p->delete_date != cp->delete_date) || (p->rename != cp->rename)
++		(p->rename != cp->rename) || (p->delete_date != cp->delete_date) || (p->hotkey_rowshift != cp->hotkey_rowshift)
+ 	)
+ 	{	//Save status
+ 		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `base_level`='%d', `job_level`='%d',"
+@@ -489,7 +489,7 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ 			"`option`='%d',`party_id`='%d',`guild_id`='%d',`pet_id`='%d',`homun_id`='%d',`elemental_id`='%d',"
+ 			"`weapon`='%d',`shield`='%d',`head_top`='%d',`head_mid`='%d',`head_bottom`='%d',`robe`='%d',"
+ 			"`last_map`='%s',`last_x`='%d',`last_y`='%d',`save_map`='%s',`save_x`='%d',`save_y`='%d', `rename`='%d',"
+-			"`delete_date`='%lu'"
++			"`delete_date`='%lu , `hotkey_rowshift`='%d'"
+ 			" WHERE  `account_id`='%d' AND `char_id` = '%d'",
+ 			char_db, p->base_level, p->job_level,
+ 			p->base_exp, p->job_exp, p->zeny,
+@@ -500,6 +500,7 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ 			mapindex_id2name(p->last_point.map), p->last_point.x, p->last_point.y,
+ 			mapindex_id2name(p->save_point.map), p->save_point.x, p->save_point.y, p->rename,
+ 			(unsigned long)p->delete_date,  // FIXME: platform-dependent size
++			p->hotkey_rowshift,
+ 			p->account_id, p->char_id) )
+ 		{
+ 			Sql_ShowDebug(sql_handle);
+@@ -825,6 +826,55 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	return 0;
+ }
+ 
++/**
++ * Returns the correct gender ID for the given character and enum value.
++ *
++ * If the per-character sex is defined but not supported by the current packetver, the database entries are corrected.
++ *
++ * @param sd Character data, if available.
++ * @param p  Character status.
++ * @param sex Character sex (database enum)
++ *
++ * @retval SEX_MALE if the per-character sex is male
++ * @retval SEX_FEMALE if the per-character sex is female
++ * @retval 99 if the per-character sex is not defined or the current PACKETVER doesn't support it.
++ */
++int char_mmo_gender(const struct char_session_data *sd, const struct mmo_charstatus *p, char sex)
++{
++#if PACKETVER >= 20141016
++	(void)sd; (void)p; // Unused
++	switch (sex) {
++		case 'M':
++			return SEX_MALE;
++		case 'F':
++			return SEX_FEMALE;
++		case 'U':
++		default:
++			return 99;
++	}
++#else
++	if (sex == 'M' || sex == 'F') {
++		if (!sd) {
++			// sd is not available, there isn't much we can do. Just return and print a warning.
++			ShowWarning("Character '%s' (CID: %d, AID: %d) has sex '%c', but PACKETVER does not support per-character sex. Defaulting to 'U'.\n",
++					p->name, p->char_id, p->account_id, sex);
++			return 99;
++		}
++		if ((sex == 'M' && sd->sex == SEX_FEMALE)
++		 || (sex == 'F' && sd->sex == SEX_MALE)) {
++			ShowWarning("Changing sex of character '%s' (CID: %d, AID: %d) to 'U' due to incompatible PACKETVER.\n", p->name, p->char_id, p->account_id);
++			char_parse_ackchangecharsex(p->char_id, sd->sex);
++		} else {
++			ShowInfo("Resetting sex of character '%s' (CID: %d, AID: %d) to 'U' due to incompatible PACKETVER.\n", p->name, p->char_id, p->account_id);
++		}
++		if (SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `sex` = 'U' WHERE `char_id` = '%d'", char_db, p->char_id)) {
++			Sql_ShowDebug(sql_handle);
++		}
++	}
++	return 99;
++#endif
++}
++
+ int mmo_char_tobuf(uint8* buf, struct mmo_charstatus* p);
+ 
+ #ifndef TXT_SQL_CONVERT
+@@ -836,6 +886,7 @@ int mmo_chars_fromsql(struct char_session_data* sd, uint8* buf)
+ 	struct mmo_charstatus p;
+ 	int j = 0, i;
+ 	char last_map[MAP_NAME_LENGTH_EXT];
++	char sex[2];
+ 
+ 	stmt = SqlStmt_Malloc(sql_handle);
+ 	if( stmt == NULL )
+@@ -850,7 +901,8 @@ int mmo_chars_fromsql(struct char_session_data* sd, uint8* buf)
+ 		"`char_id`,`char_num`,`name`,`class`,`base_level`,`job_level`,`base_exp`,`job_exp`,`zeny`,"
+ 		"`str`,`agi`,`vit`,`int`,`dex`,`luk`,`max_hp`,`hp`,`max_sp`,`sp`,"
+ 		"`status_point`,`skill_point`,`option`,`karma`,`manner`,`hair`,`hair_color`,"
+-		"`clothes_color`,`weapon`,`shield`,`head_top`,`head_mid`,`head_bottom`,`last_map`,`rename`,`delete_date`,`robe`,`body`"
++		"`clothes_color`,`weapon`,`shield`,`head_top`,`head_mid`,`head_bottom`,`last_map`,`rename`,`delete_date`,`robe`,`body`,"
++		"`sex`,`hotkey_rowshift`"
+ 		" FROM `%s` WHERE `account_id`='%d' AND `char_num` < '%d'", char_db, sd->account_id, MAX_CHARS)
+ 	||	SQL_ERROR == SqlStmt_Execute(stmt)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 0,  SQLDT_INT,    &p.char_id, 0, NULL, NULL)
+@@ -890,6 +942,8 @@ int mmo_chars_fromsql(struct char_session_data* sd, uint8* buf)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 34, SQLDT_UINT32, &p.delete_date, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 35, SQLDT_SHORT,  &p.robe, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 36, SQLDT_SHORT,  &p.body, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 37, SQLDT_ENUM,   &sex, sizeof(sex), NULL, NULL) 
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 38, SQLDT_UCHAR,  &p.hotkey_rowshift, 0, NULL, NULL)
+ 	)
+ 	{
+ 		SqlStmt_ShowDebug(stmt);
+@@ -900,6 +954,7 @@ int mmo_chars_fromsql(struct char_session_data* sd, uint8* buf)
+ 	{
+ 		p.last_point.map = mapindex_name2id(last_map);
+ 		sd->found_char[i] = p.char_id;
++		p.sex = char_mmo_gender(sd, &p, sex[0]);
+ 		j += mmo_char_tobuf(WBUFP(buf, j), &p);
+ 	}
+ 	for( ; i < MAX_CHARS; i++ )
+@@ -931,6 +986,8 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	int hotkey_num;
+ #endif
+ 
++	char sex[2];
++
+ 	memset(p, 0, sizeof(struct mmo_charstatus));
+ 	
+ 	if (save_log) ShowInfo("Char load request (%d)\n", char_id);
+@@ -948,7 +1005,8 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 		"`str`,`agi`,`vit`,`int`,`dex`,`luk`,`max_hp`,`hp`,`max_sp`,`sp`,"
+ 		"`status_point`,`skill_point`,`option`,`karma`,`manner`,`party_id`,`guild_id`,`pet_id`,`homun_id`,`elemental_id`,`hair`,"
+ 		"`hair_color`,`clothes_color`,`weapon`,`shield`,`head_top`,`head_mid`,`head_bottom`,`last_map`,`last_x`,`last_y`,"
+-		"`save_map`,`save_x`,`save_y`,`partner_id`,`father`,`mother`,`child`,`fame`,`rename`,`delete_date`,`robe`,`body`"
++		"`save_map`,`save_x`,`save_y`,`partner_id`,`father`,`mother`,`child`,`fame`,`rename`,`delete_date`,`robe`,`body`,`sex`,"
++		"`hotkey_rowshift`"
+ 		" FROM `%s` WHERE `char_id`=? LIMIT 1", char_db)
+ 	||	SQL_ERROR == SqlStmt_BindParam(stmt, 0, SQLDT_INT, &char_id, 0)
+ 	||	SQL_ERROR == SqlStmt_Execute(stmt)
+@@ -1005,6 +1063,8 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 50, SQLDT_UINT32, &p->delete_date, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 51, SQLDT_SHORT,  &p->robe, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 52, SQLDT_SHORT,  &p->body, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 53, SQLDT_ENUM,   &sex, sizeof(sex), NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 54, SQLDT_UCHAR,  &p->hotkey_rowshift, 0, NULL, NULL) 
+ 	)
+ 	{
+ 		SqlStmt_ShowDebug(stmt);
+@@ -1017,6 +1077,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 		SqlStmt_Free(stmt);
+ 		return 0;	
+ 	}
++	p->sex = char_mmo_gender(NULL, p, sex[0]);
+ 	p->last_point.map = mapindex_name2id(last_map);
+ 	p->save_point.map = mapindex_name2id(save_map);
+ 
+@@ -1649,7 +1710,7 @@ int count_users(void)
+ // Writes char data to the buffer in the format used by the client.
+ // Used in packets 0x6b (chars info) and 0x6d (new char info)
+ // Returns the size
+-#define MAX_CHAR_BUF 147 //Max size (for WFIFOHEAD calls)
++#define MAX_CHAR_BUF 150 //Max size (for WFIFOHEAD calls)
+ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ {
+ 	unsigned short offset = 0;
+@@ -1684,12 +1745,16 @@ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ 	WBUFW(buf,50) = DEFAULT_WALK_SPEED; // p->speed;
+ 	WBUFW(buf,52) = p->class_;
+ 	WBUFW(buf,54) = p->hair;
+-#if PACKETVER >= 20150513
+-	WBUFW(buf,56) = p->body;// body
++#if PACKETVER >= 20141022
++	WBUFW(buf,56) = p->body;
+ 	offset+=2;
+ 	buf = WBUFP(buffer,offset);
+ #endif
+-	WBUFW(buf,56) = p->option&0x7E80020 ? 0 : p->weapon; //When the weapon is sent and your option is riding, the client crashes on login!?
++
++	//When the weapon is sent and your option is riding, the client crashes on login!?
++	// FIXME[Haru]: is OPTION_HANBOK intended to be part of this list? And if it is, should the list also include other OPTION_ costumes?
++	WBUFW(buf,56) = (p->option&(OPTION_RIDING|OPTION_DRAGON|OPTION_WUG|OPTION_WUGRIDER|OPTION_MADOGEAR|OPTION_HANBOK)) ? 0 : p->weapon;
++
+ 	WBUFW(buf,58) = p->base_level;
+ 	WBUFW(buf,60) = min(p->skill_point, SHRT_MAX);
+ 	WBUFW(buf,62) = p->head_bottom;
+@@ -1722,17 +1787,19 @@ int mmo_char_tobuf(uint8* buffer, struct mmo_charstatus* p)
+ 	WBUFL(buf,128) = p->robe;
+ 	offset += 4;
+ #endif
+-#if PACKETVER >= 20110928
+-	WBUFL(buf,132) = 0;  // change slot feature (0 = disabled, otherwise enabled)
+-	offset += 4;
+-#endif
+-#if PACKETVER >= 20111025
+-	WBUFL(buf,136) = 0;  // unknown purpose (0 = disabled, otherwise displays "Add-Ons" sidebar)
+-	offset += 4;
+-#endif
+-#if PACKETVER >= 20150513
+-	WBUFB(buf,140) = 99;// Character's sex. (0 = Female, 1 = Male, 99 = Undefined)
+-	offset += 1;
++#if PACKETVER != 20111116 //2011-11-16 wants 136, ask gravity.
++	#if PACKETVER >= 20110928
++		WBUFL(buf,132) = 0;  // change slot feature (0 = disabled, otherwise enabled)
++		offset += 4;
++	#endif
++	#if PACKETVER >= 20111025
++		WBUFL(buf,136) = ( p->rename > 0 ) ? 1 : 0;  // (0 = disabled, otherwise displays "Add-Ons" sidebar)
++		offset += 4;
++	#endif
++	#if PACKETVER >= 20141016
++		WBUFB(buf,140) = p->sex;// sex - (0 = female, 1 = male, 99 = logindefined)
++		offset += 1;
++	#endif
+ #endif
+ 	return 106+offset;
+ }
+@@ -2086,115 +2153,8 @@ int parse_fromlogin(int fd)
+ 
+ 		// changesex reply
+ 		case 0x2723:
+-			if (RFIFOREST(fd) < 7)
+-				return 0;
+-		{
+-			unsigned char buf[7];
+-
+-			int acc = RFIFOL(fd,2);
+-			int sex = RFIFOB(fd,6);
+-			RFIFOSKIP(fd,7);
+-
+-			if( acc > 0 )
+-			{// TODO: Is this even possible?
+-				int char_id[MAX_CHARS];
+-				int class_[MAX_CHARS];
+-				int guild_id[MAX_CHARS];
+-				int num;
+-				char* data;
+-
+-				struct auth_node* node = (struct auth_node*)idb_get(auth_db, acc);
+-				if( node != NULL )
+-					node->sex = sex;
+-
+-				// get characters
+-				if( SQL_ERROR == Sql_Query(sql_handle, "SELECT `char_id`,`class`,`guild_id` FROM `%s` WHERE `account_id` = '%d'", char_db, acc) )
+-					Sql_ShowDebug(sql_handle);
+-				for( i = 0; i < MAX_CHARS && SQL_SUCCESS == Sql_NextRow(sql_handle); ++i )
+-				{
+-					Sql_GetData(sql_handle, 0, &data, NULL); char_id[i] = atoi(data);
+-					Sql_GetData(sql_handle, 1, &data, NULL); class_[i] = atoi(data);
+-					Sql_GetData(sql_handle, 2, &data, NULL); guild_id[i] = atoi(data);
+-				}
+-				num = i;
+-				for( i = 0; i < num; ++i )
+-				{
+-					if( class_[i] == JOB_BARD || class_[i] == JOB_DANCER ||
+-						class_[i] == JOB_CLOWN || class_[i] == JOB_GYPSY ||
+-						class_[i] == JOB_BABY_BARD || class_[i] == JOB_BABY_DANCER ||
+-						class_[i] == JOB_MINSTREL || class_[i] == JOB_WANDERER ||
+-						class_[i] == JOB_MINSTREL_T || class_[i] == JOB_WANDERER_T ||
+-						class_[i] == JOB_BABY_MINSTREL || class_[i] == JOB_BABY_WANDERER ||
+-						class_[i] == JOB_KAGEROU || class_[i] == JOB_OBORO ||
+-						class_[i] == JOB_BABY_KAGEROU || class_[i] == JOB_BABY_OBORO )
+-					{
+-						// job modification
+-						if( class_[i] == JOB_BARD || class_[i] == JOB_DANCER )
+-							class_[i] = (sex ? JOB_BARD : JOB_DANCER);
+-						else if( class_[i] == JOB_CLOWN || class_[i] == JOB_GYPSY )
+-							class_[i] = (sex ? JOB_CLOWN : JOB_GYPSY);
+-						else if( class_[i] == JOB_BABY_BARD || class_[i] == JOB_BABY_DANCER )
+-							class_[i] = (sex ? JOB_BABY_BARD : JOB_BABY_DANCER);
+-						else if( class_[i] == JOB_MINSTREL || class_[i] == JOB_WANDERER )
+-							class_[i] = (sex ? JOB_MINSTREL : JOB_WANDERER);
+-						else if( class_[i] == JOB_MINSTREL_T || class_[i] == JOB_WANDERER_T )
+-							class_[i] = (sex ? JOB_MINSTREL_T : JOB_WANDERER_T);
+-						else if( class_[i] == JOB_BABY_MINSTREL || class_[i] == JOB_BABY_WANDERER )
+-							class_[i] = (sex ? JOB_BABY_MINSTREL : JOB_BABY_WANDERER);
+-						else if( class_[i] == JOB_KAGEROU || class_[i] == JOB_OBORO )
+-							class_[i] = (sex ? JOB_KAGEROU : JOB_OBORO);
+-						else if( class_[i] == JOB_BABY_KAGEROU || class_[i] == JOB_BABY_OBORO )
+-							class_[i] = (sex ? JOB_BABY_KAGEROU : JOB_BABY_OBORO);
+-
+-						// Removes Bard/Dancer gender exclusive skills.
+-						if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `skill_point` = `skill_point` +"
+-							" (SELECT SUM(lv) FROM `%s` WHERE `char_id` = '%d' AND `id` >= '315' AND `id` <= '330' AND `lv` > '0')"
+-							" WHERE `char_id` = '%d'",
+-							char_db, skill_db, char_id[i], char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-						if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `char_id` = '%d' AND `id` >= '315' AND `id` <= '330'", skill_db, char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-
+-						// Removes Minstrel/Wanderer gender exclusive skills.
+-						if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `skill_point` = `skill_point` +"
+-							" (SELECT SUM(lv) FROM `%s` WHERE `char_id` = '%d' AND `id` >= '2350' AND `id` <= '2383' AND `lv` > '0')"
+-							" WHERE `char_id` = '%d'",
+-							char_db, skill_db, char_id[i], char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-						if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `char_id` = '%d' AND `id` >= '2350' AND `id` <= '2383'", skill_db, char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-
+-						// Removes Kagerou/Oboro gender exclusive skills.
+-						if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `skill_point` = `skill_point` +"
+-							" (SELECT SUM(lv) FROM `%s` WHERE `char_id` = '%d' AND `id` >= '3023' AND `id` <= '3029' AND `lv` > '0')"
+-							" WHERE `char_id` = '%d'",
+-							char_db, skill_db, char_id[i], char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-						if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `char_id` = '%d' AND `id` >= '3023' AND `id` <= '3029'", skill_db, char_id[i]) )
+-							Sql_ShowDebug(sql_handle);
+-					}
+-					// to avoid any problem with equipment and invalid sex, equipment is unequiped.
+-					if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `equip` = '0' WHERE `char_id` = '%d'", inventory_db, char_id[i]) )
+-						Sql_ShowDebug(sql_handle);
+-					if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `class`='%d', `weapon`='0', `shield`='0', `head_top`='0', `head_mid`='0', `head_bottom`='0', `robe`='0' WHERE `char_id`='%d'", char_db, class_[i], char_id[i]) )
+-						Sql_ShowDebug(sql_handle);
+-
+-					if( guild_id[i] )// If there is a guild, update the guild_member data [Skotlex]
+-						inter_guild_sex_changed(guild_id[i], acc, char_id[i], sex);
+-				}
+-				Sql_FreeResult(sql_handle);
+-
+-				// disconnect player if online on char-server
+-				disconnect_player(acc);
+-			}
+-
+-			// notify all mapservers about this change
+-			WBUFW(buf,0) = 0x2b0d;
+-			WBUFL(buf,2) = acc;
+-			WBUFB(buf,6) = sex;
+-			mapif_sendall(buf, 7);
+-		}
+-		break;
++			char_parse_ackchangesex(fd, sd);
++			break;
+ 
+ 		// reply to an account_reg2 registry request
+ 		case 0x2729:
+@@ -2333,6 +2293,247 @@ int save_accreg2(unsigned char* buf, int len)
+ 	return 0;
+ }
+ 
++/**
++ * Performs the necessary operations when changing a character's sex, such as
++ * correcting the job class and unequipping items, and propagating the
++ * information to the guild data.
++ *
++ * @param sex      The new sex (SEX_MALE or SEX_FEMALE).
++ * @param acc      The character's account ID.
++ * @param char_id  The character ID.
++ * @param class_   The character's current job class.
++ * @param guild_id The character's guild ID.
++ */
++void char_parse_change_sex_sub(int sex, int acc, int char_id, int class_, int guild_id)
++{
++	// job modification
++	if (class_ == JOB_BARD || class_ == JOB_DANCER)
++		class_ = (sex == SEX_MALE ? JOB_BARD : JOB_DANCER);
++	else if (class_ == JOB_CLOWN || class_ == JOB_GYPSY)
++		class_ = (sex == SEX_MALE ? JOB_CLOWN : JOB_GYPSY);
++	else if (class_ == JOB_BABY_BARD || class_ == JOB_BABY_DANCER)
++		class_ = (sex == SEX_MALE ? JOB_BABY_BARD : JOB_BABY_DANCER);
++	else if (class_ == JOB_MINSTREL || class_ == JOB_WANDERER)
++		class_ = (sex == SEX_MALE ? JOB_MINSTREL : JOB_WANDERER);
++	else if (class_ == JOB_MINSTREL_T || class_ == JOB_WANDERER_T)
++		class_ = (sex == SEX_MALE ? JOB_MINSTREL_T : JOB_WANDERER_T);
++	else if (class_ == JOB_BABY_MINSTREL || class_ == JOB_BABY_WANDERER)
++		class_ = (sex == SEX_MALE ? JOB_BABY_MINSTREL : JOB_BABY_WANDERER);
++	else if (class_ == JOB_KAGEROU || class_ == JOB_OBORO)
++		class_ = (sex == SEX_MALE ? JOB_KAGEROU : JOB_OBORO);
++
++	if (SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `equip` = '0' WHERE `char_id` = '%d'", inventory_db, char_id))
++		Sql_ShowDebug(sql_handle);
++
++	if (SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `class` = '%d', `weapon` = '0', `shield` = '0', `head_top` = '0', `head_mid` = '0', `head_bottom` = '0' WHERE `char_id` = '%d'", char_db, class_, char_id))
++		Sql_ShowDebug(sql_handle);
++	if (guild_id) // If there is a guild, update the guild_member data [Skotlex]
++		inter_guild_sex_changed(guild_id, acc, char_id, sex);
++}
++
++int char_parse_ackchangesex(int fd, struct char_session_data* sd)
++{
++	if (RFIFOREST(fd) < 7)
++		return 0;
++	{
++		unsigned char buf[7];
++		int acc = RFIFOL(fd,2);
++		int sex = RFIFOB(fd,6);
++		RFIFOSKIP(fd,7);
++
++		if (acc > 0) { // TODO: Is this even possible?
++			unsigned char i;
++			int char_id = 0, class_ = 0, guild_id = 0;
++			struct auth_node* node = (struct auth_node*)idb_get(auth_db, acc);
++			SqlStmt *stmt;
++
++			if (node != NULL)
++				node->sex = sex;
++
++			// get characters
++			stmt = SqlStmt_Malloc(sql_handle);
++			if (SQL_ERROR == SqlStmt_Prepare(stmt, "SELECT `char_id`, `class`, `guild_id` FROM `%s` WHERE `account_id` = '%d'", char_db, acc) || SqlStmt_Execute(stmt)) {
++				SqlStmt_ShowDebug(stmt);
++				SqlStmt_Free(stmt);
++			}
++
++			SqlStmt_BindColumn(stmt, 0, SQLDT_INT,   &char_id,  0, NULL, NULL);
++			SqlStmt_BindColumn(stmt, 1, SQLDT_SHORT, &class_,   0, NULL, NULL);
++			SqlStmt_BindColumn(stmt, 2, SQLDT_INT,   &guild_id, 0, NULL, NULL);
++
++			for (i = 0; i < MAX_CHARS && SQL_SUCCESS == SqlStmt_NextRow(stmt); ++i) {
++				char_parse_change_sex_sub(sex, acc, char_id, class_, guild_id);
++			}
++			SqlStmt_Free(stmt);
++		}
++
++		// notify all mapservers about this change
++		WBUFW(buf,0) = 0x2b0d;
++		WBUFL(buf,2) = acc;
++		WBUFB(buf,6) = sex;
++		mapif_sendall(buf, 7);
++	}
++	return 1;
++}
++
++/**
++ * Changes a character's sex.
++ * The information is updated on database, and the character is kicked if it
++ * currently is online.
++ *
++ * @param char_id The character's ID.
++ * @param sex     The new sex.
++ * @retval 0 in case of success.
++ * @retval 1 in case of failure.
++ */
++int char_parse_ackchangecharsex(int char_id, int sex)
++{
++	int class_ = 0, guild_id = 0, account_id = 0;
++	unsigned char buf[7];
++	char *data;
++
++	// get character data
++	if (SQL_ERROR == Sql_Query(sql_handle, "SELECT `account_id`,`class`,`guild_id` FROM `%s` WHERE `char_id` = '%d'", char_db, char_id)) {
++		Sql_ShowDebug(sql_handle);
++		return 1;
++	}
++	if (Sql_NumRows(sql_handle) != 1 || SQL_ERROR == Sql_NextRow(sql_handle)) {
++		Sql_FreeResult(sql_handle);
++		return 1;
++	}
++
++	Sql_GetData(sql_handle, 0, &data, NULL); account_id = atoi(data);
++	Sql_GetData(sql_handle, 1, &data, NULL); class_ = atoi(data);
++	Sql_GetData(sql_handle, 2, &data, NULL); guild_id = atoi(data);
++	Sql_FreeResult(sql_handle);
++
++	if (SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `sex` = '%c' WHERE `char_id` = '%d'", char_db, sex == SEX_MALE ? 'M' : 'F', char_id)) {
++		Sql_ShowDebug(sql_handle);
++		return 1;
++	}
++	char_parse_change_sex_sub(sex, account_id, char_id, class_, guild_id);
++
++	// disconnect player if online on char-server
++	disconnect_player(account_id);
++
++	// notify all mapservers about this change
++	WBUFW(buf,0) = 0x2b0d;
++	WBUFL(buf,2) = account_id;
++	WBUFB(buf,6) = sex;
++	mapif_sendall(buf, 7);
++	return 0;
++}
++
++/**
++ * Forward a change of status for account to login-serv
++ * @param fd: which fd to parse from
++ * @return : 0 not enough data received, 1 success
++ */
++int char_parse_fwlog_changestatus(int fd){
++	if (RFIFOREST(fd) < 44)
++		return 0;
++	else {
++		int result = 0; // 0-login-server request done, 1-player not found, 2-gm level too low, 3-login-server offline, 4-current group level > VIP group level
++		char esc_name[NAME_LENGTH*2+1];
++		char answer = true;
++
++		int aid = RFIFOL(fd,2); // account_id of who ask (-1 if server itself made this request)
++		const char* name = (char*)RFIFOP(fd,6); // name of the target character
++		int operation = RFIFOW(fd,30); // type of operation: 1-block, 2-ban, 3-unblock, 4-unban, 5-changesex, 6-vip, 7-changecharsex
++		int32 timediff = 0;
++		int val1 = 0, sex = SEX_MALE;
++
++		if (operation == 2) {
++			timediff = RFIFOL(fd, 32);
++			val1 = RFIFOL(fd, 36);
++		} else if (operation == 7)
++			sex = RFIFOB(fd, 32);
++		RFIFOSKIP(fd,44);
++
++		Sql_EscapeStringLen(sql_handle, esc_name, name, strnlen(name, NAME_LENGTH));
++		if( SQL_ERROR == Sql_Query(sql_handle, "SELECT `account_id`, `char_id` FROM `%s` WHERE `name` = '%s'", char_db, esc_name) )
++			Sql_ShowDebug(sql_handle);
++		else if( Sql_NumRows(sql_handle) == 0 ) {
++			result = 1; // 1-player not found
++		}
++		else if( SQL_SUCCESS != Sql_NextRow(sql_handle) ) {
++			Sql_ShowDebug(sql_handle);
++			result = 1;
++		} else {
++			int t_aid; // target account id
++			int t_cid; // target char id
++			char* data;
++
++			Sql_GetData(sql_handle, 0, &data, NULL); t_aid = atoi(data);
++			Sql_GetData(sql_handle, 1, &data, NULL); t_cid = atoi(data);
++			Sql_FreeResult(sql_handle);
++
++			if( login_fd <= 0 )
++				result = 3; // 3-login-server offline
++			//FIXME: need to move this check to login server [ultramage]
++			//	if( acc != -1 && isGM(acc) < isGM(account_id) )
++			//		result = 2; // 2-gm level too low
++			else {
++				//! NOTE: See src/char/chrif.h::enum chrif_req_op for the number
++				switch( operation ) {
++					case 1: // block
++						WFIFOHEAD(login_fd,10);
++						WFIFOW(login_fd,0) = 0x2724;
++						WFIFOL(login_fd,2) = t_aid;
++						WFIFOL(login_fd,6) = 5; // new account status
++						WFIFOSET(login_fd,10);
++						break;
++					case 2: // ban
++						WFIFOHEAD(login_fd,10);
++						WFIFOW(login_fd, 0) = 0x2725;
++						WFIFOL(login_fd, 2) = t_aid;
++						WFIFOL(login_fd, 6) = timediff;
++						WFIFOSET(login_fd,10);
++						break;
++					case 3: // unblock
++						WFIFOHEAD(login_fd,10);
++						WFIFOW(login_fd,0) = 0x2724;
++						WFIFOL(login_fd,2) = t_aid;
++						WFIFOL(login_fd,6) = 0; // new account status
++						WFIFOSET(login_fd,10);
++						break;
++					case 4: // unban
++						WFIFOHEAD(login_fd,6);
++						WFIFOW(login_fd,0) = 0x272a;
++						WFIFOL(login_fd,2) = t_aid;
++						WFIFOSET(login_fd,6);
++						break;
++					case 5: // changesex
++						answer = false;
++						WFIFOHEAD(login_fd,6);
++						WFIFOW(login_fd,0) = 0x2727;
++						WFIFOL(login_fd,2) = t_aid;
++						WFIFOSET(login_fd,6);
++						break;
++					case 6: // vip (not yet supported [15peaces])
++						break;
++					case 7: // changecharsex
++						answer = false;
++						char_parse_ackchangecharsex(t_cid, sex);
++						break;
++				} //end switch operation
++			} //login is connected
++		}
++
++		// send answer if a player asks, not if the server asks
++		if( aid != -1 && answer) { // Don't send answer for changesex/changecharsex
++			WFIFOHEAD(fd,34);
++			WFIFOW(fd, 0) = 0x2b0f;
++			WFIFOL(fd, 2) = aid;
++			safestrncpy((char*)WFIFOP(fd,6), name, NAME_LENGTH);
++			WFIFOW(fd,30) = operation;
++			WFIFOW(fd,32) = result;
++			WFIFOSET(fd,34);
++		}
++	}
++	return 1;
++}
++
+ void char_read_fame_list(void)
+ {
+ 	int i;
+@@ -2858,107 +3059,8 @@ int parse_frommap(int fd)
+ 		break;
+ 
+ 		case 0x2b0e: // Request from map-server to change an account's status (will just be forwarded to login server)
+-			if (RFIFOREST(fd) < 44)
+-				return 0;
+-		{
+-			int result = 0; // 0-login-server request done, 1-player not found, 2-gm level too low, 3-login-server offline
+-			char esc_name[NAME_LENGTH*2+1];
+-
+-			int acc = RFIFOL(fd,2); // account_id of who ask (-1 if server itself made this request)
+-			const char* name = (char*)RFIFOP(fd,6); // name of the target character
+-			int type = RFIFOW(fd,30); // type of operation: 1-block, 2-ban, 3-unblock, 4-unban
+-			short year = RFIFOW(fd,32);
+-			short month = RFIFOW(fd,34);
+-			short day = RFIFOW(fd,36);
+-			short hour = RFIFOW(fd,38);
+-			short minute = RFIFOW(fd,40);
+-			short second = RFIFOW(fd,42);
+-			RFIFOSKIP(fd,44);
+-
+-			Sql_EscapeStringLen(sql_handle, esc_name, name, strnlen(name, NAME_LENGTH));
+-			if( SQL_ERROR == Sql_Query(sql_handle, "SELECT `account_id`,`name` FROM `%s` WHERE `name` = '%s'", char_db, esc_name) )
+-				Sql_ShowDebug(sql_handle);
+-			else
+-			if( Sql_NumRows(sql_handle) == 0 )
+-			{
+-				result = 1; // 1-player not found
+-			}
+-			else
+-			if( SQL_SUCCESS != Sql_NextRow(sql_handle) )
+-				Sql_ShowDebug(sql_handle);
+-				//FIXME: set proper result value?
+-			else
+-			{
+-				char name[NAME_LENGTH];
+-				int account_id;
+-				char* data;
+-
+-				Sql_GetData(sql_handle, 0, &data, NULL); account_id = atoi(data);
+-				Sql_GetData(sql_handle, 1, &data, NULL); safestrncpy(name, data, sizeof(name));
+-
+-				if( login_fd <= 0 )
+-					result = 3; // 3-login-server offline
+-				//FIXME: need to move this check to login server [ultramage]
+-//				else
+-//				if( acc != -1 && isGM(acc) < isGM(account_id) )
+-//					result = 2; // 2-gm level too low
+-				else
+-				switch( type ) {
+-				case 1: // block
+-						WFIFOHEAD(login_fd,10);
+-						WFIFOW(login_fd,0) = 0x2724;
+-						WFIFOL(login_fd,2) = account_id;
+-						WFIFOL(login_fd,6) = 5; // new account status
+-						WFIFOSET(login_fd,10);
+-				break;
+-				case 2: // ban
+-						WFIFOHEAD(login_fd,18);
+-						WFIFOW(login_fd, 0) = 0x2725;
+-						WFIFOL(login_fd, 2) = account_id;
+-						WFIFOW(login_fd, 6) = year;
+-						WFIFOW(login_fd, 8) = month;
+-						WFIFOW(login_fd,10) = day;
+-						WFIFOW(login_fd,12) = hour;
+-						WFIFOW(login_fd,14) = minute;
+-						WFIFOW(login_fd,16) = second;
+-						WFIFOSET(login_fd,18);
+-				break;
+-				case 3: // unblock
+-						WFIFOHEAD(login_fd,10);
+-						WFIFOW(login_fd,0) = 0x2724;
+-						WFIFOL(login_fd,2) = account_id;
+-						WFIFOL(login_fd,6) = 0; // new account status
+-						WFIFOSET(login_fd,10);
+-				break;
+-				case 4: // unban
+-						WFIFOHEAD(login_fd,6);
+-						WFIFOW(login_fd,0) = 0x272a;
+-						WFIFOL(login_fd,2) = account_id;
+-						WFIFOSET(login_fd,6);
+-				break;
+-				case 5: // changesex
+-						WFIFOHEAD(login_fd,6);
+-						WFIFOW(login_fd,0) = 0x2727;
+-						WFIFOL(login_fd,2) = account_id;
+-						WFIFOSET(login_fd,6);
+-				break;
+-				}
+-			}
+-
+-			Sql_FreeResult(sql_handle);
+-
+-			// send answer if a player ask, not if the server ask
+-			if( acc != -1 && type != 5) { // Don't send answer for changesex
+-				WFIFOHEAD(fd,34);
+-				WFIFOW(fd, 0) = 0x2b0f;
+-				WFIFOL(fd, 2) = acc;
+-				safestrncpy((char*)WFIFOP(fd,6), name, NAME_LENGTH);
+-				WFIFOW(fd,30) = type;
+-				WFIFOW(fd,32) = result;
+-				WFIFOSET(fd,34);
+-			}
+-		}
+-		break;
++			char_parse_fwlog_changestatus(fd);
++			break;
+ 
+ 		case 0x2b10: // Update and send fame ranking list
+ 			if (RFIFOREST(fd) < 11)
+@@ -3173,7 +3275,8 @@ int parse_frommap(int fd)
+ 				node->sex == sex /*&&
+ 				node->ip == ip*/ )
+ 			{// auth ok
+-				cd->sex = sex;
++				if (cd->sex == 99)
++					cd->sex = sex;
+ 
+ 				WFIFOHEAD(fd,24 + sizeof(struct mmo_charstatus));
+ 				WFIFOW(fd,0) = 0x2afd;
+@@ -3629,7 +3732,8 @@ int parse_char(int fd)
+ 
+ 			//Have to switch over to the DB instance otherwise data won't propagate [Kevin]
+ 			cd = (struct mmo_charstatus *)idb_get(char_db_, char_id);
+-			cd->sex = sd->sex;
++			if (cd->sex == 99)
++				cd->sex = sd->sex;
+ 
+ 			if (log_char) {
+ 				char esc_name[NAME_LENGTH*2+1];
+diff --git a/rewrite/src/char_sql/char.h b/rewrite/src/char_sql/char.h
+index a40340c..e46899a 100644
+--- a/rewrite/src/char_sql/char.h
++++ b/rewrite/src/char_sql/char.h
+@@ -27,6 +27,9 @@ int char_married(int pl1,int pl2);
+ int char_child(int parent_id, int child_id);
+ int char_family(int pl1,int pl2,int pl3);
+ 
++int char_parse_ackchangesex(int fd, struct char_session_data* sd);
++int char_parse_ackchangecharsex(int char_id, int sex);
++
+ int request_accreg2(int account_id, int char_id);
+ int save_accreg2(unsigned char* buf, int len);
+ 
+diff --git a/rewrite/src/common/mmo.h b/rewrite/src/common/mmo.h
+index b9e778e..2da42cf 100644
+--- a/rewrite/src/common/mmo.h
++++ b/rewrite/src/common/mmo.h
+@@ -48,7 +48,8 @@
+ 
+ #ifndef PACKETVER
+ 	//#define PACKETVER	20081126
+-	#define PACKETVER 20151029
++	#define PACKETVER 20141022
++	//#define PACKETVER 20151029
+ #endif
+ // backward compatible PACKETVER 8 and 9
+ #if PACKETVER == 8
+@@ -247,6 +248,47 @@ struct point {
+ 	short x,y;
+ };
+ 
++//OPTION: (EFFECTSTATE_)
++enum {
++	OPTION_NOTHING     = 0x00000000,
++	OPTION_SIGHT       = 0x00000001,
++	OPTION_HIDE        = 0x00000002,
++	OPTION_CLOAK       = 0x00000004,
++	OPTION_CART1       = 0x00000008,
++	OPTION_FALCON      = 0x00000010,
++	OPTION_RIDING      = 0x00000020,
++	OPTION_INVISIBLE   = 0x00000040,
++	OPTION_CART2       = 0x00000080,
++	OPTION_CART3       = 0x00000100,
++	OPTION_CART4       = 0x00000200,
++	OPTION_CART5       = 0x00000400,
++	OPTION_ORCISH      = 0x00000800,
++	OPTION_WEDDING     = 0x00001000,
++	OPTION_RUWACH      = 0x00002000,
++	OPTION_CHASEWALK   = 0x00004000,
++	OPTION_FLYING      = 0x00008000, //Note that clientside Flying and Xmas are 0x8000 for clients prior to 2007.
++	OPTION_XMAS        = 0x00010000,
++	OPTION_TRANSFORM   = 0x00020000,
++	OPTION_SUMMER      = 0x00040000,
++	OPTION_DRAGON1     = 0x00080000,
++	OPTION_WUG         = 0x00100000,
++	OPTION_WUGRIDER    = 0x00200000,
++	OPTION_MADOGEAR    = 0x00400000,
++	OPTION_DRAGON2     = 0x00800000,
++	OPTION_DRAGON3     = 0x01000000,
++	OPTION_DRAGON4     = 0x02000000,
++	OPTION_DRAGON5     = 0x04000000,
++	OPTION_HANBOK      = 0x08000000,
++	OPTION_OKTOBERFEST = 0x10000000,
++	OPTION_SUMMER2     = 0x20000000,// Fix me. I exist, but not like this.
++};
++
++#define OPTION_CART (OPTION_CART1|OPTION_CART2|OPTION_CART3|OPTION_CART4|OPTION_CART5)
++#define OPTION_DRAGON (OPTION_DRAGON1|OPTION_DRAGON2|OPTION_DRAGON3|OPTION_DRAGON4|OPTION_DRAGON5)
++#define OPTION_COSTUME (OPTION_WEDDING|OPTION_XMAS|OPTION_SUMMER|OPTION_HANBOK|OPTION_OKTOBERFEST|OPTION_SUMMER2)
++
++#define OPTION_MASK ~0x40
++
+ struct s_skill {
+ 	unsigned short id,lv,flag;
+ };
+@@ -408,6 +450,8 @@ struct mmo_charstatus {
+ 	short rename;
+ 
+ 	time_t delete_date;
++
++	unsigned char hotkey_rowshift;
+ };
+ 
+ typedef enum mail_status {
+diff --git a/rewrite/src/map/atcommand.c b/rewrite/src/map/atcommand.c
+index 6833d2d..1498640 100644
+--- a/rewrite/src/map/atcommand.c
++++ b/rewrite/src/map/atcommand.c
+@@ -6887,8 +6887,8 @@ ACMD_FUNC(npctalk)
+ 	strtok(name, "#"); // discard extra name identifier if present
+ 	snprintf(temp, sizeof(temp), "%s : %s", name, mes);
+ 	
+-	if(ifcolor) clif_messagecolor(&nd->bl,color,temp);
+-	else clif_message(&nd->bl, temp);
++	if(ifcolor) clif_disp_overheadcolor(&nd->bl,color,temp);
++	else clif_disp_overhead(&nd->bl, temp);
+ 
+ 	return 0;
+ }
+@@ -6937,7 +6937,7 @@ ACMD_FUNC(pettalk)
+ 	}
+ 
+ 	snprintf(temp, sizeof temp ,"%s : %s", pd->pet.name, mes);
+-	clif_message(&pd->bl, temp);
++	clif_disp_overhead(&pd->bl, temp);
+ 
+ 	return 0;
+ }
+@@ -7227,12 +7227,43 @@ ACMD_FUNC(uptime)
+ 
+ /*==========================================
+  * @changesex <sex>
+- * => Changes one's sex. Argument sex can be 0 or 1, m or f, male or female.
++ * => Changes one's account sex. Argument sex can be 0 or 1, m or f, male or female.
+  *------------------------------------------*/
+ ACMD_FUNC(changesex)
+ {
++	int i;
++
+ 	nullpo_retr(-1, sd);
+-	chrif_changesex(sd);
++
++	pc_resetskill(sd,4);
++	// to avoid any problem with equipment and invalid sex, equipment is unequiped.
++	for (i = 0; i < EQI_MAX; i++) {
++		if (sd->equip_index[i] >= 0)
++			pc_unequipitem(sd, sd->equip_index[i], 3);
++	}
++
++	chrif_changesex(sd, true);
++	return 0;
++}
++
++/*==========================================
++ * @changecharsex <sex>
++ * => Changes one's character sex. Argument sex can be 0 or 1, m or f, male or female.
++ *------------------------------------------*/
++ACMD_FUNC(changecharsex)
++{
++	int i;
++
++	nullpo_retr(-1, sd);
++
++	pc_resetskill(sd,4);
++	// to avoid any problem with equipment and invalid sex, equipment is unequiped.
++	for (i = 0; i < EQI_MAX; i++) {
++		if (sd->equip_index[i] >= 0)
++			pc_unequipitem(sd, sd->equip_index[i], 3);
++	}
++
++	chrif_changesex(sd, false);
+ 	return 0;
+ }
+ 
+@@ -7768,7 +7799,7 @@ ACMD_FUNC(homtalk)
+ 	}
+ 
+ 	snprintf(temp, sizeof temp ,"%s : %s", sd->hd->homunculus.name, mes);
+-	clif_message(&sd->hd->bl, temp);
++	clif_disp_overhead(&sd->hd->bl, temp);
+ 
+ 	return 0;
+ }
+@@ -8206,7 +8237,7 @@ ACMD_FUNC(me)
+ 	}
+ 	
+ 	sprintf(atcmd_output, msg_txt(270), sd->status.name, tempmes);	// *%s %s*
+-	clif_disp_overhead(sd, atcmd_output);
++	clif_disp_overhead(&sd->bl, atcmd_output);
+ 	
+ 	return 0;
+ 	
+@@ -9384,6 +9415,7 @@ AtCommandInfo atcommand_info[] = {
+ 	{ "clearweather",      99,99,     atcommand_clearweather },
+ 	{ "uptime",             1,1,      atcommand_uptime },
+ 	{ "changesex",         60,60,     atcommand_changesex },
++	{ "changecharsex",     60,60,     atcommand_changecharsex },
+ 	{ "mute",              80,80,     atcommand_mute },
+ 	{ "refresh",            1,1,      atcommand_refresh },
+ 	{ "identify",          40,40,     atcommand_identify },
+diff --git a/rewrite/src/map/battle.c b/rewrite/src/map/battle.c
+index 6c75fc7..8096123 100644
+--- a/rewrite/src/map/battle.c
++++ b/rewrite/src/map/battle.c
+@@ -6094,6 +6094,7 @@ static const struct _battle_data {
+ 	{ "gc_skill_edp_boost_formula_a",       &battle_config.gc_skill_edp_boost_formula_a,    0,      0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_b",       &battle_config.gc_skill_edp_boost_formula_b,    20,     0,      1000,           },
+ 	{ "gc_skill_edp_boost_formula_c",       &battle_config.gc_skill_edp_boost_formula_c,    1,      0,      1,              },
++	{ "feature.roulette",                   &battle_config.feature_roulette,                1,      0,      1,              }, 
+ };
+ 
+ 
+@@ -6154,7 +6155,14 @@ void battle_adjust_conf()
+ 		battle_config.day_duration = 60000;
+ 	if (battle_config.night_duration && battle_config.night_duration < 60000) // added by [Yor]
+ 		battle_config.night_duration = 60000;
+-	
++
++#if PACKETVER < 20141022
++	if (battle_config.feature_roulette) {
++		ShowWarning("conf/battle/feature.conf roulette is enabled but it requires PACKETVER 2014-10-22 or newer, disabling...\n");
++		battle_config.feature_roulette = 0;
++	}
++#endif
++
+ #ifndef CELL_NOSTACK
+ 	if (battle_config.cell_stack_limit != 1)
+ 		ShowWarning("Battle setting 'cell_stack_limit' takes no effect as this server was compiled without Cell Stack Limit support.\n");
+diff --git a/rewrite/src/map/battle.h b/rewrite/src/map/battle.h
+index a2d03b0..fda4921 100644
+--- a/rewrite/src/map/battle.h
++++ b/rewrite/src/map/battle.h
+@@ -554,6 +554,7 @@ extern struct Battle_Config
+ 	int gc_skill_edp_boost_formula_b;
+ 	int gc_skill_edp_boost_formula_c;
+ 
++	int feature_roulette;
+ } battle_config;
+ 
+ void do_init_battle(void);
+diff --git a/rewrite/src/map/buyingstore.c b/rewrite/src/map/buyingstore.c
+index a217910..0058643 100644
+--- a/rewrite/src/map/buyingstore.c
++++ b/rewrite/src/map/buyingstore.c
+@@ -375,7 +375,7 @@ void buyingstore_trade(struct map_session_data* sd, int account_id, unsigned int
+ 
+ 		// notify clients
+ 		clif_buyingstore_delete_item(sd, index, amount, pl_sd->buyingstore.items[listidx].price);
+-		clif_buyingstore_update_item(pl_sd, nameid, amount);
++		clif_buyingstore_update_item(pl_sd, nameid, amount, sd->status.char_id, zeny);
+ 	}
+ 
+ 	// check whether or not there is still something to buy
+diff --git a/rewrite/src/map/chrif.c b/rewrite/src/map/chrif.c
+index 2b6fc3e..190ee2b 100644
+--- a/rewrite/src/map/chrif.c
++++ b/rewrite/src/map/chrif.c
+@@ -66,7 +66,7 @@ static const int packet_len_table[0x3d] = { // U - used, F - free
+ //2b0a: Outgoing, chrif_skillcooldown_request -> request skill cooldown data
+ //2b0b: Incoming, chrif_skillcooldown_load -> receives skill cooldown data
+ //2b0c: Outgoing, chrif_changeemail -> 'change mail address ...'
+-//2b0d: Incoming, chrif_changedsex -> 'Change sex of acc XY'
++//2b0d: Incoming, chrif_changedsex -> 'Change sex of acc XY' (or char)
+ //2b0e: Outgoing, chrif_char_ask_name -> 'Do some operations (change sex, ban / unban etc)'
+ //2b0f: Incoming, chrif_char_ask_name_answer -> 'answer of the 2b0e'
+ //2b10: Outgoing, chrif_updatefamelist -> 'Update the fame ranking lists and send them'
+@@ -649,7 +649,9 @@ void chrif_authfail(int fd)
+ 		node->account_id == account_id &&
+ 		node->char_id == char_id &&
+ 		node->login_id1 == login_id1 &&
++#if PACKETVER < 20141016
+ 		node->sex == sex &&
++#endif
+ 		node->state == ST_LOGIN )
+ 	{// found a match
+ 		clif_authfail_fd(node->fd, 0);
+@@ -776,14 +778,16 @@ int chrif_char_ask_name(int acc, const char* character_name, unsigned short oper
+ 	return 0;
+ }
+ 
+-int chrif_changesex(struct map_session_data *sd)
++int chrif_changesex(struct map_session_data *sd, bool change_account)
+ {
+ 	chrif_check(-1);
+ 	WFIFOHEAD(char_fd,44);
+ 	WFIFOW(char_fd,0) = 0x2b0e;
+ 	WFIFOL(char_fd,2) = sd->status.account_id;
+ 	safestrncpy((char*)WFIFOP(char_fd,6), sd->status.name, NAME_LENGTH);
+-	WFIFOW(char_fd,30) = 5;
++	WFIFOW(char_fd,30) = (change_account ? 5 : 7);
++	if (!change_account)
++		WFIFOB(char_fd,32) = sd->status.sex == SEX_MALE ? SEX_FEMALE : SEX_MALE;
+ 	WFIFOSET(char_fd,44);
+ 
+ 	clif_displaymessage(sd->fd, "Need disconnection to perform change-sex request...");
+@@ -823,7 +827,7 @@ static void chrif_char_ask_name_answer(int acc, const char* player_name, uint16
+ 	case 2 : action = "ban"; break;
+ 	case 3 : action = "unblock"; break;
+ 	case 4 : action = "unban"; break;
+-	case 5 : action = "change the sex of"; break;
++	case 5 : case 7: action = "change the sex of"; break;
+ 	default: action = "???"; break;
+ 	}
+ 	
+diff --git a/rewrite/src/map/chrif.h b/rewrite/src/map/chrif.h
+index 5c0be5c..a5a1ed2 100644
+--- a/rewrite/src/map/chrif.h
++++ b/rewrite/src/map/chrif.h
+@@ -55,7 +55,7 @@ int chrif_char_offline_nsd(int account_id, int char_id);
+ int chrif_char_reset_offline(void);
+ int send_users_tochar(void);
+ int chrif_char_online(struct map_session_data *sd);
+-int chrif_changesex(struct map_session_data *sd);
++int chrif_changesex(struct map_session_data *sd, bool change_account);
+ int chrif_chardisconnect(struct map_session_data *sd);
+ int check_connect_char_server(int tid, unsigned int tick, int id, intptr data);
+ int chrif_divorce(int partner_id1, int partner_id2);
+diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
+index 75d2dab..45ef9a3 100644
+--- a/rewrite/src/map/clif.c
++++ b/rewrite/src/map/clif.c
+@@ -562,6 +562,8 @@ int clif_authok(struct map_session_data *sd)
+ 
+ #if PACKETVER < 20080102
+ 	const short cmd = 0x73;
++#elif PACKETVER >= 20141022 && PACKETVER < 20150513
++	const short cmd = 0xa18;
+ #else
+ 	const short cmd = 0x2eb;
+ #endif
+@@ -579,7 +581,9 @@ int clif_authok(struct map_session_data *sd)
+ #if PACKETVER >= 20080102
+ 	WFIFOW(fd,11) = 0;// Font. Default to 0 for now.
+ #endif
+-	//WFIFOB(fd,13) = 0;// Sex. For packet 0xa18 which is no longer used.
++#if PACKETVER >= 20141016 && PACKETVER < 20150513
++	WFIFOB(fd,13) = sd->status.sex;
++#endif
+ 	WFIFOSET(fd,packet_len(cmd));
+ 
+ 	return 0;
+@@ -6396,32 +6400,30 @@ void clif_status_change_single(struct block_list *dst, struct block_list *bl, in
+ 	clif_send(buf,packet_len(WBUFW(buf,0)),dst,SELF);
+ }
+ 
+-/*==========================================
+- * Send message (modified by [Yor])
+- *------------------------------------------*/
+-int clif_displaymessage(const int fd, const char* mes)
++/// Send message (modified by [Yor]) (ZC_NOTIFY_PLAYERCHAT).
++/// 008e <packet len>.W <message>.?B
++void clif_displaymessage(const int fd, const char* mes)
+ {
+-	// invalid pointer?
+-	nullpo_retr(-1, mes);
+-	
++	nullpo_retv(mes);
++
+ 	//Scrapped, as these are shared by disconnected players =X [Skotlex]
+-	if( fd == 0 )
+-		return 0;
+-	else
+-	{
+-		int len_mes = strlen(mes);
++	if ( fd > 0 ) {
++#if PACKETVER == 20141022
++		/** for some reason game client crashes depending on message pattern (only for this packet) **/
++		/** so we redirect to ZC_NPC_CHAT **/
++		clif_disp_overheadcolor_self(fd, COLOR_DEFAULT, mes);
++#else
++		size_t len;
+ 
+-		if( len_mes > 0 )
+-		{ // don't send a void message (it's not displaying on the client chat). @help can send void line.
+-			WFIFOHEAD(fd, 5 + len_mes);
++		if ( ( len = strnlen(mes, 255) ) > 0 ) { // don't send a void message (it's not displaying on the client chat). @help can send void line.
++			WFIFOHEAD(fd, 5 + len);
+ 			WFIFOW(fd,0) = 0x8e;
+-			WFIFOW(fd,2) = 5 + len_mes; // 4 + len + NULL teminate
+-			memcpy(WFIFOP(fd,4), mes, len_mes + 1);
+-			WFIFOSET(fd, 5 + len_mes);
++			WFIFOW(fd,2) = 5 + len; // 4 + len + NULL terminate
++			safestrncpy((char *)WFIFOP(fd,4), mes, len + 1);
++			WFIFOSET(fd, 5 + len);
+ 		}
++#endif
+ 	}
+-
+-	return 0;
+ }
+ 
+ /*==========================================
+@@ -7290,25 +7292,34 @@ void clif_openvending(struct map_session_data* sd, int id, struct s_vending* ven
+ 	}
+ 	WFIFOSET(fd,WFIFOW(fd,2));
+ 
+-#if PACKETVER >= 20150513
++#if PACKETVER >= 20141022
+ 	clif_openvending_ack(sd);
+ #endif
+ }
+ 
+-/// Inform merchant that someone has bought an item (ZC_DELETEITEM_FROM_MCSTORE).
+-/// 0137 <index>.W <amount>.W
+-void clif_vendingreport(struct map_session_data* sd, int index, int amount)
+-{
+-	int fd;
++/// Inform merchant that someone has bought an item.
++/// 0137 <index>.W <amount>.W (ZC_DELETEITEM_FROM_MCSTORE).
++/// 09e5 <index>.W <amount>.W <GID>.L <Date>.L <zeny>.L (ZC_DELETEITEM_FROM_MCSTORE2).
++void clif_vendingreport(struct map_session_data* sd, int index, int amount, uint32 char_id, int zeny) {
++#if PACKETVER < 20141016		// TODO : not sure for client date [Napster]
++	const int cmd = 0x137;
++#else
++	const int cmd = 0x9e5;
++#endif
++	int fd = sd->fd;
+ 
+ 	nullpo_retv(sd);
+ 
+-	fd = sd->fd;
+-	WFIFOHEAD(fd,packet_len(0x137));
+-	WFIFOW(fd,0) = 0x137;
++	WFIFOHEAD(fd,packet_len(cmd));
++	WFIFOW(fd,0) = cmd;
+ 	WFIFOW(fd,2) = index+2;
+ 	WFIFOW(fd,4) = amount;
+-	WFIFOSET(fd,packet_len(0x137));
++#if PACKETVER >= 20141016
++	WFIFOL(fd,6) = char_id; // GID
++	WFIFOL(fd,10) = (int)time(NULL); // Date
++	WFIFOL(fd,14) = zeny; // zeny
++#endif
++	WFIFOSET(fd,packet_len(cmd));
+ }
+ 
+ /// Result of organizing a party.
+@@ -9222,57 +9233,56 @@ void clif_specialeffect_single(struct block_list* bl, int type, int fd)
+ 	WFIFOSET(fd,10);
+ }
+ 
+-/******************************************************
+- * W.<packet> W.<LENGTH> L.<ID> L.<COLOR> S.<TEXT>
+- * Mob/NPC Color Talk [SnakeDrak]
+- ******************************************************/
+-int clif_messagecolor(struct block_list* bl, unsigned long color, const char* msg)
++/**
++ * Modification of clif_disp_overheadcolor to send colored messages to players to chat log only (doesn't display overhead).
++ *
++ * 02c1 <packet len>.W <id>.L <color>.L <message>.?B
++ *
++ * @param fd    Target fd to send the message to
++ * @param color Message color (RGB format: 0xRRGGBB)
++ * @param msg   Message text
++ */
++void clif_disp_overheadcolor_self(int fd, uint32 color, const char *msg)
+ {
+-	unsigned short msg_len = strlen(msg) + 1;
+-	uint8 buf[256];
+-	color = (color & 0x0000FF) << 16 | (color & 0x00FF00) | (color & 0xFF0000) >> 16; // RGB to BGR
+-
+-	nullpo_ret(bl);
+-
+-	if( msg_len > sizeof(buf)-12 )
+-	{
+-		ShowWarning("clif_messagecolor: Truncating too long message '%s' (len=%u).\n", msg, msg_len);
+-		msg_len = sizeof(buf)-12;
+-	}
+-
+-	WBUFW(buf,0) = 0x2C1;
+-	WBUFW(buf,2) = msg_len + 12;
+-	WBUFL(buf,4) = bl->id;
+-	WBUFL(buf,8) = color;
+-	memcpy(WBUFP(buf,12), msg, msg_len);
+-
+-	clif_send(buf, WBUFW(buf,2), bl, AREA_CHAT_WOC);
++	size_t msg_len = strlen(msg) + 1;
+ 
+-	return 0;
++	WFIFOHEAD(fd,msg_len + 12);
++	WFIFOW(fd,0) = 0x2C1;
++	WFIFOW(fd,2) = msg_len + 12;
++	WFIFOL(fd,4) = 0;
++	WFIFOL(fd,8) = RGB2BGR(color);
++	safestrncpy((char*)WFIFOP(fd,12), msg, msg_len);
++	WFIFOSET(fd, msg_len + 12);
+ }
+ 
+-// messages (from mobs/npcs) [Valaris]
+-int clif_message(struct block_list* bl, const char* msg)
++/**
++ * Monster/NPC color chat [SnakeDrak] (ZC_NPC_CHAT).
++ *
++ * 02c1 <packet len>.W <id>.L <color>.L <message>.?B
++ *
++ * @param bl    Source block list.
++ * @param color Message color (RGB format: 0xRRGGBB)
++ * @param msg   Message text
++ */
++void clif_disp_overheadcolor(struct block_list* bl, uint32 color, const char *msg)
+ {
+-	unsigned short msg_len = strlen(msg) + 1;
++	size_t msg_len = strlen(msg) + 1;
+ 	uint8 buf[256];
+ 
+-	nullpo_ret(bl);
++	nullpo_retv(bl);
+ 
+-	if( msg_len > sizeof(buf)-8 )
+-	{
+-		ShowWarning("clif_message: Truncating too long message '%s' (len=%u).\n", msg, msg_len);
+-		msg_len = sizeof(buf)-8;
++	if (msg_len > sizeof(buf)-12) {
++		ShowWarning("clif_disp_overheadcolor: Truncating too long message '%s'.\n", msg);
++		msg_len = sizeof(buf)-12;
+ 	}
+ 
+-	WBUFW(buf,0) = 0x8d;
+-	WBUFW(buf,2) = msg_len + 8;
++	WBUFW(buf,0) = 0x2C1;
++	WBUFW(buf,2) = msg_len + 12;
+ 	WBUFL(buf,4) = bl->id;
+-	memcpy(WBUFP(buf,8), msg, msg_len);
++	WBUFL(buf,8) = RGB2BGR(color);
++	memcpy(WBUFP(buf,12), msg, msg_len);
+ 
+ 	clif_send(buf, WBUFW(buf,2), bl, AREA_CHAT_WOC);
+-
+-	return 0;
+ }
+ 
+ // refresh the client's screen, getting rid of any effects
+@@ -9561,32 +9571,35 @@ void clif_slide(struct block_list *bl, int x, int y)
+ 	}
+ }
+ 
+-/*------------------------------------------
+- * @me command by lordalfa, rewritten implementation by Skotlex
+- *------------------------------------------*/
+-int clif_disp_overhead(struct map_session_data *sd, const char* mes)
++/// Public chat message (ZC_NOTIFY_CHAT). lordalfa/Skotlex - used by @me as well
++/// 008d <packet len>.W <id>.L <message>.?B
++void clif_disp_overhead(struct block_list *bl, const char* mes)
+ {
+-	unsigned char buf[256]; //This should be more than sufficient, the theorical max is CHAT_SIZE + 8 (pads and extra inserted crap)
+-	int len_mes = strlen(mes)+1; //Account for \0
++	unsigned char buf[256]; //This should be more than sufficient, the theoretical max is CHAT_SIZE + 8 (pads and extra inserted crap)
++	size_t len_mes;
+ 
+-	if (len_mes + 8 >= 256) {
+-		ShowError("clif_disp_overhead: Message too long (length %d)\n", len_mes);
+-		len_mes = 247; //Trunk it to avoid problems.
++	nullpo_retv(bl);
++	nullpo_retv(mes);
++	len_mes = strlen(mes)+1; //Account for \0
++
++	if (len_mes > sizeof(buf)-8) {
++		ShowError("clif_disp_overhead: Message too long\n");
++		len_mes = sizeof(buf)-8; //Trunk it to avoid problems.
+ 	}
+ 	// send message to others
+ 	WBUFW(buf,0) = 0x8d;
+ 	WBUFW(buf,2) = len_mes + 8; // len of message + 8 (command+len+id)
+-	WBUFL(buf,4) = sd->bl.id;
+-	memcpy(WBUFP(buf,8), mes, len_mes);
+-	clif_send(buf, WBUFW(buf,2), &sd->bl, AREA_CHAT_WOC);
++	WBUFL(buf,4) = bl->id;
++	safestrncpy((char*)WBUFP(buf,8), mes, len_mes);
++	clif_send(buf, WBUFW(buf,2), bl, AREA_CHAT_WOC);
+ 
+ 	// send back message to the speaker
+-	WBUFW(buf,0) = 0x8e;
+-	WBUFW(buf, 2) = len_mes + 4;
+-	memcpy(WBUFP(buf,4), mes, len_mes);  
+-	clif_send(buf, WBUFW(buf,2), &sd->bl, SELF);
+-
+-	return 0;
++	if( bl->type == BL_PC ) {
++		WBUFW(buf,0) = 0x8e;
++		WBUFW(buf, 2) = len_mes + 4;
++		safestrncpy((char*)WBUFP(buf,4), mes, len_mes);
++		clif_send(buf, WBUFW(buf,2), bl, SELF);
++	}
+ }
+ 
+ /*==========================
+@@ -10535,22 +10548,34 @@ void clif_parse_TickSend(int fd, struct map_session_data *sd)
+ 	return;
+ }
+ 
++/// 02b9 { <is skill>.B <id>.L <count>.W }*27 (ZC_SHORTCUT_KEY_LIST)
++/// 07d9 { <is skill>.B <id>.L <count>.W }*36 (ZC_SHORTCUT_KEY_LIST_V2, PACKETVER >= 20090603)
++/// 07d9 { <is skill>.B <id>.L <count>.W }*38 (ZC_SHORTCUT_KEY_LIST_V2, PACKETVER >= 20090617)
++/// 0a00 <rotate>.B { <is skill>.B <id>.L <count>.W }*38 (ZC_SHORTCUT_KEY_LIST_V3, PACKETVER >= 20141022) 
+ void clif_hotkeys_send(struct map_session_data *sd) {
+ #ifdef HOTKEY_SAVING
+ 	const int fd = sd->fd;
+ 	int i;
++	int offset = 2;
+ #if PACKETVER<20090603
+ 	const int cmd = 0x02b9;
+-#else
++#elif PACKETVER < 20141022
+ 	const int cmd = 0x07d9;
++#else
++	char Rotate = sd->status.hotkey_rowshift;
++	const int cmd = 0xa00;
++	offset = 3;
+ #endif
+ 	if (!fd) return;
+-	WFIFOHEAD(fd, 2+MAX_HOTKEYS*7);
++	WFIFOHEAD(fd, offset + MAX_HOTKEYS * 7);
+ 	WFIFOW(fd, 0) = cmd;
++#if PACKETVER >= 20141022
++	WFIFOB(fd, 2) = Rotate;
++#endif
+ 	for(i = 0; i < MAX_HOTKEYS; i++) {
+-		WFIFOB(fd, 2 + 0 + i * 7) = sd->status.hotkeys[i].type; // type: 0: item, 1: skill
+-		WFIFOL(fd, 2 + 1 + i * 7) = sd->status.hotkeys[i].id; // item or skill ID
+-		WFIFOW(fd, 2 + 5 + i * 7) = sd->status.hotkeys[i].lv; // skill level
++		WFIFOB(fd, offset + 0 + i * 7) = sd->status.hotkeys[i].type; // type: 0: item, 1: skill
++		WFIFOL(fd, offset + 1 + i * 7) = sd->status.hotkeys[i].id; // item or skill ID
++		WFIFOW(fd, offset + 5 + i * 7) = sd->status.hotkeys[i].lv; // item qty or skill level
+ 	}
+ 	WFIFOSET(fd, packet_len(cmd));
+ #endif
+@@ -10572,6 +10597,12 @@ void clif_parse_Hotkey(int fd, struct map_session_data *sd) {
+ #endif
+ }
+ 
++/// Request to update a position on the hotkey row bar
++void clif_parse_HotkeyRowShift(int fd, struct map_session_data *sd) {
++	int cmd = RFIFOW(fd, 0);
++	sd->status.hotkey_rowshift = RFIFOB(fd, packet_db[sd->packet_ver][cmd].pos[0]);
++}
++
+ void clif_progressbar(struct map_session_data * sd, unsigned long color, unsigned int second)
+ {
+ 	int fd = sd->fd;
+@@ -15593,7 +15624,7 @@ void clif_quest_send_list(struct map_session_data * sd)
+ {
+ 	int fd = sd->fd;
+ 	int i;
+-#if PACKETVER < 20150513
++#if PACKETVER < 20141022
+ 	short packet_num = 0x2b1;
+ 	short quest_info = 5;
+ #else
+@@ -15611,7 +15642,7 @@ void clif_quest_send_list(struct map_session_data * sd)
+ 	{
+ 		WFIFOL(fd, i*quest_info+8) = sd->quest_log[i].quest_id;
+ 		WFIFOB(fd, i*quest_info+12) = sd->quest_log[i].state;
+-#if PACKETVER >= 20150513
++#if PACKETVER >= 20141022
+ 		WFIFOL(fd, i*quest_info+13) = sd->quest_log[i].time - quest_db[sd->quest_index[i]].time;
+ 		WFIFOL(fd, i*quest_info+17) = sd->quest_log[i].time;
+ 		WFIFOW(fd, i*quest_info+21) = quest_db[sd->quest_index[i]].num_objectives;
+@@ -16716,18 +16747,33 @@ void clif_buyingstore_trade_failed_buyer(struct map_session_data* sd, short resu
+ }
+ 
+ 
+-/// Updates the zeny limit and an item in the buying store item list (ZC_UPDATE_ITEM_FROM_BUYING_STORE)
+-/// 081b <name id>.W <amount>.W <limit zeny>.L
+-void clif_buyingstore_update_item(struct map_session_data* sd, unsigned short nameid, unsigned short amount)
+-{
++/// Updates the zeny limit and an item in the buying store item list.
++/// 081b <name id>.W <amount>.W <limit zeny>.L (ZC_UPDATE_ITEM_FROM_BUYING_STORE)
++/// 09e6 <name id>.W <amount>.W <zeny>.L <limit zeny>.L <GID>.L <Date>.L (ZC_UPDATE_ITEM_FROM_BUYING_STORE2)
++void clif_buyingstore_update_item(struct map_session_data* sd, unsigned short nameid, unsigned short amount, uint32 char_id, int zeny) {
++#if PACKETVER < 20141016		// TODO : not sure for client date [Napster]
++	const int cmd = 0x81b;
++#else
++	const int cmd = 0x9e6;
++#endif
++	int offset = 0;
+ 	int fd = sd->fd;
+ 
+-	WFIFOHEAD(fd,packet_len(0x81b));
+-	WFIFOW(fd,0) = 0x81b;
++	WFIFOHEAD(fd,packet_len(cmd));
++	WFIFOW(fd,0) = cmd;
+ 	WFIFOW(fd,2) = nameid;
+ 	WFIFOW(fd,4) = amount;  // amount of nameid received
+-	WFIFOW(fd,6) = sd->buyingstore.zenylimit;
+-	WFIFOSET(fd,packet_len(0x81b));
++#if PACKETVER >= 20141016
++	WFIFOL(fd,6) = zeny; // zeny
++	offset += 4;
++#endif
++	WFIFOL(fd,6+offset) = sd->buyingstore.zenylimit;
++#if PACKETVER >= 20141016
++	WFIFOL(fd,10+offset) = char_id; // GID
++	WFIFOL(fd,14+offset) = (int)time(NULL); // date
++#endif
++
++	WFIFOSET(fd,packet_len(cmd));
+ }
+ 
+ 
+@@ -17020,6 +17066,264 @@ void clif_parse_debug(int fd,struct map_session_data *sd)
+ 	ShowDump(RFIFOP(fd,0), packet_len);
+ }
+ 
++/// Roulette System
++/// Author: Yommy
++
++/**
++ * Opens Roulette window
++ * @param fd
++ * @param sd
++ */
++void clif_parse_RouletteOpen(int fd, struct map_session_data* sd)
++{
++	nullpo_retv(sd);
++
++	if (!battle_config.feature_roulette) {
++		clif_disp_overheadcolor_self(fd,COLOR_RED,msg_txt(724)); //Roulette is disabled
++		return;
++	}
++
++	WFIFOHEAD(fd,packet_len(0xa1a));
++	WFIFOW(fd,0) = 0xa1a;
++	WFIFOB(fd,2) = 0; // result
++	WFIFOL(fd,3) = 0; // serial
++	WFIFOB(fd,7) = (sd->roulette.claimPrize) ? sd->roulette.stage - 1 : 0;
++	WFIFOB(fd,8) = (sd->roulette.claimPrize) ? sd->roulette.prizeIdx : -1;
++	WFIFOW(fd,9) = -1; //! TODO: Display bonus item
++	WFIFOL(fd,11) = sd->roulette_point.gold;
++	WFIFOL(fd,15) = sd->roulette_point.silver;
++	WFIFOL(fd,19) = sd->roulette_point.bronze;
++	WFIFOSET(fd,packet_len(0xa1a));
++}
++
++/**
++ * Generates information to be displayed
++ * @param fd
++ * @param sd
++ */
++void clif_parse_RouletteInfo(int fd, struct map_session_data* sd)
++{
++	unsigned short i, j, count = 0;
++	int len = 8 + (42 * 8);
++
++	nullpo_retv(sd);
++
++	if (!battle_config.feature_roulette) {
++		clif_disp_overheadcolor_self(fd,COLOR_RED,msg_txt(724)); //Roulette is disabled
++		return;
++	}
++
++	WFIFOHEAD(fd,len);
++	WFIFOW(fd,0) = 0xa1c;
++	WFIFOW(fd,2) = len;
++	WFIFOL(fd,4) = 1; // serial
++
++	for(i = 0; i < MAX_ROULETTE_LEVEL; i++) {
++		for(j = 0; j < MAX_ROULETTE_COLUMNS - i; j++) {
++			WFIFOW(fd,8 * count + 8) = i;
++			WFIFOW(fd,8 * count + 10) = j;
++			WFIFOW(fd,8 * count + 12) = rd.nameid[i][j];
++			WFIFOW(fd,8 * count + 14) = rd.qty[i][j];
++			count++;
++		}
++	}
++
++	WFIFOSET(fd,len);
++	return;
++}
++
++/**
++ * Closes Roulette window
++ * @param fd
++ * @param sd
++ */
++void clif_parse_RouletteClose(int fd, struct map_session_data* sd)
++{
++	nullpo_retv(sd);
++
++	if (!battle_config.feature_roulette) {
++		clif_disp_overheadcolor_self(fd,COLOR_RED,msg_txt(724)); //Roulette is disabled
++		return;
++	}
++
++	/** What do we need this for? (other than state tracking), game client closes the window without our response. **/
++	return;
++}
++
++ /**
++ *
++ **/
++static void clif_roulette_recvitem_ack(struct map_session_data *sd, enum RECV_ROULETTE_ITEM_REQ type) {
++#if PACKETVER >= 20141016
++	uint16 cmd = 0xa22;
++	unsigned char buf[5];
++
++	nullpo_retv(sd)
++
++	if (packet_db[sd->packet_ver][cmd].len == 0)
++		return;
++
++	WBUFW(buf,0) = cmd;
++	WBUFB(buf,2) = type;
++	WBUFW(buf,3) = 0; //! TODO: Additional item
++	clif_send(buf, sizeof(buf), &sd->bl, SELF);
++#endif
++}
++
++/**
++ * Claim roulette reward
++ * @param sd Player
++ * @return 0:Success
++ **/
++static uint8 clif_roulette_getitem(struct map_session_data *sd) {
++	struct item it;
++	uint8 res = 1;
++
++	nullpo_retr(1, sd);
++
++	if (sd->roulette.prizeIdx < 0)
++		return RECV_ITEM_FAILED;
++
++	memset(&it, 0, sizeof(it));
++
++	it.nameid = rd.nameid[sd->roulette.prizeStage][sd->roulette.prizeIdx];
++	it.identify = 1;
++
++	if ((res = pc_additem(sd, &it, rd.qty[sd->roulette.prizeStage][sd->roulette.prizeIdx])) == 0) {
++		; // onSuccess
++	}
++
++	sd->roulette.claimPrize = false;
++	sd->roulette.prizeStage = 0;
++	sd->roulette.prizeIdx = -1;
++	sd->roulette.stage = 0;
++	return res;
++}
++
++/**
++ * Process the stage and attempt to give a prize
++ * @param fd
++ * @param sd
++ */
++void clif_parse_RouletteGenerate(int fd, struct map_session_data* sd)
++{
++	enum GENERATE_ROULETTE_ACK result = GENERATE_ROULETTE_SUCCESS;
++	short stage = sd->roulette.stage;
++
++	nullpo_retv(sd);
++
++	if (!battle_config.feature_roulette) {
++		clif_disp_overheadcolor_self(fd,COLOR_RED,msg_txt(724)); //Roulette is disabled
++		return;
++	}
++
++	if (sd->roulette.stage >= MAX_ROULETTE_LEVEL)
++		stage = sd->roulette.stage = 0;
++
++	if (!stage) {
++		if (sd->roulette_point.bronze <= 0 && sd->roulette_point.silver < 10 && sd->roulette_point.gold < 10)
++			result = GENERATE_ROULETTE_NO_ENOUGH_POINT;
++	}
++
++	if (result == GENERATE_ROULETTE_SUCCESS) {
++		if (!stage) {
++			if (sd->roulette_point.bronze > 0) {
++				sd->roulette_point.bronze -= 1;
++				pc_setglobalreg(sd, ROULETTE_BRONZE_VAR, sd->roulette_point.bronze);
++			} else if (sd->roulette_point.silver > 9) {
++				sd->roulette_point.silver -= 10;
++				stage = sd->roulette.stage = 2;
++				pc_setglobalreg(sd, ROULETTE_SILVER_VAR, sd->roulette_point.silver);
++			} else if (sd->roulette_point.gold > 9) {
++				sd->roulette_point.gold -= 10;
++				stage = sd->roulette.stage = 4;
++				pc_setglobalreg(sd, ROULETTE_GOLD_VAR, sd->roulette_point.gold);
++			}
++		}
++
++		sd->roulette.prizeStage = stage;
++		sd->roulette.prizeIdx = rand()%rd.items[stage];
++
++		if (rd.flag[stage][sd->roulette.prizeIdx]&1) {
++			clif_roulette_generate_ack(sd,GENERATE_ROULETTE_LOSING,stage,sd->roulette.prizeIdx,0);
++			clif_roulette_getitem(sd);
++			clif_roulette_recvitem_ack(sd, RECV_ITEM_SUCCESS);
++			return;
++		}
++		else {
++			sd->roulette.claimPrize = true;
++			sd->roulette.stage++;
++		}
++	}
++
++	clif_roulette_generate_ack(sd,result,stage,(sd->roulette.prizeIdx == -1 ? 0 : sd->roulette.prizeIdx),0); 
++}
++
++/**
++ * Request to cash in prize
++ * @param fd
++ * @param sd
++ */
++void clif_parse_RouletteRecvItem(int fd, struct map_session_data* sd)
++{
++	enum RECV_ROULETTE_ITEM_REQ type = RECV_ITEM_FAILED;
++	nullpo_retv(sd);
++
++	if (!battle_config.feature_roulette) {
++		clif_disp_overheadcolor_self(fd,COLOR_RED,msg_txt(724)); //Roulette is disabled
++		return;
++	}
++
++	if (sd->roulette.claimPrize && sd->roulette.prizeIdx != -1) {
++		switch (clif_roulette_getitem(sd)) {
++			case 0:
++				type = RECV_ITEM_SUCCESS;
++				break;
++			case 1:
++			case 4:
++			case 5:
++				type = RECV_ITEM_OVERCOUNT;
++				break;
++			case 2:
++				type = RECV_ITEM_OVERWEIGHT;
++				break;
++			case 7:
++			default:
++				type = RECV_ITEM_FAILED;
++				break;
++		}
++	}
++
++	clif_roulette_recvitem_ack(sd,type);
++	return;
++}
++
++/**
++ * Update Roulette window with current stats
++ * @param sd
++ * @param result
++ * @param stage
++ * @param prizeIdx
++ * @param bonusItemID
++ */
++void clif_roulette_generate_ack(struct map_session_data *sd, unsigned char result, short stage, short prizeIdx, short bonusItemID)
++{
++	int fd = sd->fd;
++
++	nullpo_retv(sd);
++
++	WFIFOHEAD(fd,packet_len(0xa20));
++	WFIFOW(fd,0) = 0xa20;
++	WFIFOB(fd,2) = result;
++	WFIFOW(fd,3) = stage;
++	WFIFOW(fd,5) = prizeIdx;
++	WFIFOW(fd,7) = bonusItemID;
++	WFIFOL(fd,9) = sd->roulette_point.gold;
++	WFIFOL(fd,13) = sd->roulette_point.silver;
++	WFIFOL(fd,17) = sd->roulette_point.bronze;
++	WFIFOSET(fd,packet_len(0xa20));
++}
++
+ /*==========================================
+  * Main client packet processing function
+  *------------------------------------------*/
+@@ -17447,12 +17751,16 @@ static int packetdb_readdb(void)
+ 	//#0x09C0
+ 	    0, 10,  0,  0,  0,  0,  0,  0,  0,  0, 23, 17,  0,  0,102,  0,
+ 	    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1, -1, -1,  0,  7,
+-	    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+-	    0,  0,  0,  0,  0,  0,  0, 75, -1,  0,  0,  0,  0, -1, -1, -1,
++	    0,  0,  0,  0,  0, 18, 22,  3, 11,  0, 11, -1,  0,  3, 11,  0, 
++	    0, 11, 12, 11,  0,  0,  0, 75, -1,143,  0,  0,  0, -1, -1, -1, 
+ 	//#0x0A00
+-	    0,  0,  4,  0,  0,  0,  0,  0,  0, 45, 47, 47, 56, -1,  0, -1,
+-	   -1,  0,  0,  0,  0,  0,  0,  0, 14,  0,  0,  0,  0,  0,  0,  0,
+-	    0,  0,  0,  0,  0,  0,  0,  8,  3,  0,  0,  0,  0,  0,  0,  0,
++#if PACKETVER >= 20141022
++	  269,  3,  4,  2,  6, 49,  6,  9, 26, 45, 47, 47, 56, -1,  0, -1,
++#else
++	  269,  0,  4,  2,  6, 48,  6,  9, 26, 45, 47, 47, 56, -1,  0, -1,
++#endif
++	   -1,  0,  0, 26,  0,  0,  0,  0, 14,  2, 23,  2, -1,  2,  3,  2,
++	   21,  3,  5,  0, 66,  0,  0,  8,  3,  0,  0,  0,  0,  0,  0,  0,
+ 	    0,  0,  0,  0,  0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,
+ 	//#0x0A40
+ 	    0,  0,  0,  0,  0,  0, 14,  3,  2,  0,  0,  0,  0,  0,  0,  0,
+@@ -17668,6 +17976,14 @@ static int packetdb_readdb(void)
+ 		{clif_parse_SearchStoreInfoListItemClick,"searchstoreinfolistitemclick"},
+ 		//{ clif_parse_MoveItem , "moveitem" },
+ 		{clif_parse_ranking,"ranking"},
++		// Roulette
++		{ clif_parse_RouletteOpen, "rouletteopen" },
++		{ clif_parse_RouletteInfo, "rouletteinfo" },
++		{ clif_parse_RouletteClose, "rouletteclose" },
++		{ clif_parse_RouletteGenerate, "roulettegenerate" },
++		{ clif_parse_RouletteRecvItem, "rouletterecvitem" },
++		// HotkeyRowShift
++		{ clif_parse_HotkeyRowShift, "hotkeyrowshift"},
+ 		{NULL,NULL}
+ 	};
+ 
+diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
+index 678ac20..50875a8 100644
+--- a/rewrite/src/map/clif.h
++++ b/rewrite/src/map/clif.h
+@@ -27,9 +27,17 @@ struct battleground_data;
+ struct quest;
+ struct party_booking_ad_info;
+ #include <stdarg.h>
++
++#define RGB2BGR(c) ((c & 0x0000FF) << 16 | (c & 0x00FF00) | (c & 0xFF0000) >> 16)
++
++#define COLOR_RED     0xff0000U
++#define COLOR_GREEN   0x00ff00U
++#define COLOR_WHITE   0xffffffU
++#define COLOR_DEFAULT COLOR_GREEN
++
+ // packet DB
+-#define MAX_PACKET_DB		0xf00
+-#define MAX_PACKET_VER		34
++#define MAX_PACKET_DB		0xAFF
++#define MAX_PACKET_VER		36
+ #define	MAX_PACKET_POS		20
+ 
+ struct s_packet_db {
+@@ -38,6 +46,35 @@ struct s_packet_db {
+ 	short pos[MAX_PACKET_POS];
+ };
+ 
++enum RECV_ROULETTE_ITEM_REQ {
++	RECV_ITEM_SUCCESS    = 0x0,
++	RECV_ITEM_FAILED     = 0x1,
++	RECV_ITEM_OVERCOUNT  = 0x2,
++	RECV_ITEM_OVERWEIGHT = 0x3,
++};
++
++enum RECV_ROULETTE_ITEM_ACK {
++	RECV_ITEM_NORMAL =  0x0,
++	RECV_ITEM_LOSING =  0x1,
++};
++
++enum GENERATE_ROULETTE_ACK {
++	GENERATE_ROULETTE_SUCCESS         = 0x0,
++	GENERATE_ROULETTE_FAILED          = 0x1,
++	GENERATE_ROULETTE_NO_ENOUGH_POINT = 0x2,
++	GENERATE_ROULETTE_LOSING          = 0x3,
++};
++
++enum OPEN_ROULETTE_ACK {
++	OPEN_ROULETTE_SUCCESS = 0x0,
++	OPEN_ROULETTE_FAILED  = 0x1,
++};
++
++enum CLOSE_ROULETTE_ACK {
++	CLOSE_ROULETTE_SUCCESS = 0x0,
++	CLOSE_ROULETTE_FAILED  = 0x1,
++};
++
+ // packet_db[SERVER] is reserved for server use
+ #define SERVER 0
+ #define packet_len(cmd) packet_db[SERVER][cmd].len
+@@ -539,7 +576,7 @@ void clif_closevendingboard(struct block_list* bl,int fd);
+ void clif_vendinglist(struct map_session_data* sd,int id, struct s_vending* vending);
+ void clif_buyvending(struct map_session_data* sd, int index, int amount, int fail);
+ void clif_openvending(struct map_session_data* sd, int id, struct s_vending* vending);
+-void clif_vendingreport(struct map_session_data* sd, int index, int amount);
++void clif_vendingreport(struct map_session_data* sd, int index, int amount, uint32 char_id, int zeny);
+ 
+ int clif_movetoattack(struct map_session_data *sd,struct block_list *bl);
+ 
+@@ -609,7 +646,7 @@ void clif_instance_leave(int fd);
+ int clif_font(struct map_session_data *sd);
+ 
+ // atcommand
+-int clif_displaymessage(const int fd,const char* mes);
++void clif_displaymessage(const int fd, const char* mes);
+ int clif_disp_onlyself(struct map_session_data *sd,const char *mes,int len);
+ void clif_disp_message(struct block_list* src, const char* mes, int len, enum send_target target);
+ int clif_broadcast(struct block_list *bl, const char* mes, int len, int type, enum send_target target);
+@@ -643,8 +680,6 @@ void clif_friendslist_reqack(struct map_session_data *sd, struct map_session_dat
+ void clif_weather(int m); // [Valaris]
+ int clif_specialeffect(struct block_list* bl, int type, enum send_target target); // special effects [Valaris]
+ void clif_specialeffect_single(struct block_list* bl, int type, int fd);
+-int clif_messagecolor(struct block_list* bl, unsigned long color, const char* msg); // Mob/Npc color talk [SnakeDrak]
+-int clif_message(struct block_list *bl, const char* msg); // messages (from mobs/npcs) [Valaris]
+ 
+ int clif_GM_kickack(struct map_session_data *sd,int id);
+ void clif_GM_kick(struct map_session_data *sd,struct map_session_data *tsd);
+@@ -652,7 +687,7 @@ void clif_manner_message(struct map_session_data* sd, uint32 type);
+ void clif_GM_silence(struct map_session_data* sd, struct map_session_data* tsd, uint8 type);
+ int clif_timedout(struct map_session_data *sd);
+ 
+-int clif_disp_overhead(struct map_session_data *sd, const char* mes);
++void clif_disp_overhead(struct block_list *bl, const char* mes);
+ 
+ void clif_get_weapon_view(struct map_session_data* sd, unsigned short *rhand, unsigned short *lhand);
+ 
+@@ -761,7 +796,7 @@ void clif_buyingstore_disappear_entry(struct map_session_data* sd);
+ void clif_buyingstore_disappear_entry_single(struct map_session_data* sd, struct map_session_data* pl_sd);
+ void clif_buyingstore_itemlist(struct map_session_data* sd, struct map_session_data* pl_sd);
+ void clif_buyingstore_trade_failed_buyer(struct map_session_data* sd, short result);
+-void clif_buyingstore_update_item(struct map_session_data* sd, unsigned short nameid, unsigned short amount);
++void clif_buyingstore_update_item(struct map_session_data* sd, unsigned short nameid, unsigned short amount, uint32 char_id, int zeny); 
+ void clif_buyingstore_delete_item(struct map_session_data* sd, short index, unsigned short amount, int price);
+ void clif_buyingstore_trade_failed_seller(struct map_session_data* sd, short result, unsigned short nameid);
+ 
+@@ -804,4 +839,15 @@ int clif_dressing_room(struct map_session_data *sd, int view);
+ int clif_hom_spiritball(struct homun_data *hd);
+ int clif_hom_skillupdateinfo(struct map_session_data *sd,int skillid,int type,int range);
+ 
++/// Roulette
++void clif_roulette_generate_ack(struct map_session_data *sd, unsigned char result, short stage, short prizeIdx, short bonusItemID);
++void clif_parse_RouletteOpen(int fd, struct map_session_data *sd);
++void clif_parse_RouletteInfo(int fd, struct map_session_data *sd);
++void clif_parse_RouletteClose(int fd, struct map_session_data *sd);
++void clif_parse_RouletteGenerate(int fd, struct map_session_data *sd);
++void clif_parse_RouletteRecvItem(int fd, struct map_session_data *sd);
++
++void clif_disp_overheadcolor_self(int fd, uint32 color, const char *msg);
++void clif_disp_overheadcolor(struct block_list* bl, uint32 color, const char *msg);
++
+ #endif /* _CLIF_H_ */
+diff --git a/rewrite/src/map/itemdb.c b/rewrite/src/map/itemdb.c
+index 012dcc0..d13ff4e 100644
+--- a/rewrite/src/map/itemdb.c
++++ b/rewrite/src/map/itemdb.c
+@@ -713,6 +713,118 @@ static bool itemdb_read_buyingstore(char* fields[], int columns, int current)
+ 	return true;
+ }
+ 
++/**
++ * Process Roulette items
++ */
++bool itemdb_parse_roulette_db(void)
++{
++	int i, j;
++	uint32 count = 0;
++
++	// retrieve all rows from the item database
++	if (SQL_ERROR == Sql_Query(mmysql_handle, "SELECT * FROM `%s`", db_roulette_table)) {
++		Sql_ShowDebug(mmysql_handle);
++		return false;
++	}
++
++	for (i = 0; i < MAX_ROULETTE_LEVEL; i++)
++		rd.items[i] = 0;
++
++	for (i = 0; i < MAX_ROULETTE_LEVEL; i++) {
++		int k, limit = MAX_ROULETTE_COLUMNS - i;
++
++		for (k = 0; k < limit && SQL_SUCCESS == Sql_NextRow(mmysql_handle); k++) {
++			char* data;
++			unsigned short item_id, amount;
++			int level, flag;
++
++			Sql_GetData(mmysql_handle, 1, &data, NULL); level = atoi(data);
++			Sql_GetData(mmysql_handle, 2, &data, NULL); item_id = atoi(data);
++			Sql_GetData(mmysql_handle, 3, &data, NULL); amount = atoi(data);
++			Sql_GetData(mmysql_handle, 4, &data, NULL); flag = atoi(data);
++
++			if (!itemdb_exists(item_id)) {
++				ShowWarning("itemdb_parse_roulette_db: Unknown item ID '%hu' in level '%d'\n", item_id, level);
++ 				continue;
++			}
++			if (amount < 1) {
++				ShowWarning("itemdb_parse_roulette_db: Unsupported amount '%hu' for item ID '%hu' in level '%d'\n", amount, item_id, level);
++ 				continue;
++			}
++			if (flag < 0 || flag > 1) {
++				ShowWarning("itemdb_parse_roulette_db: Unsupported flag '%d' for item ID '%hu' in level '%d'\n", flag, item_id, level);
++ 				continue;
++			}
++
++			j = rd.items[i];
++			RECREATE(rd.nameid[i], unsigned short, ++rd.items[i]);
++			RECREATE(rd.qty[i], unsigned short, rd.items[i]);
++			RECREATE(rd.flag[i], int, rd.items[i]);
++
++			rd.nameid[i][j] = item_id;
++			rd.qty[i][j] = amount;
++			rd.flag[i][j] = flag;
++
++			++count;
++		}
++	}
++
++	// free the query result
++	Sql_FreeResult(mmysql_handle);
++
++	for (i = 0; i < MAX_ROULETTE_LEVEL; i++) {
++		int limit = MAX_ROULETTE_COLUMNS - i;
++
++		if (rd.items[i] == limit)
++			continue;
++
++		if (rd.items[i] > limit) {
++			ShowWarning("itemdb_parse_roulette_db: level %d has %d items, only %d supported, capping...\n", i + 1, rd.items[i], limit);
++			rd.items[i] = limit;
++			continue;
++		}
++
++		/** this scenario = rd.items[i] < limit **/
++		ShowWarning("itemdb_parse_roulette_db: Level %d has %d items, %d are required. Filling with Apples...\n", i + 1, rd.items[i], limit); 
++
++		rd.items[i] = limit;
++		RECREATE(rd.nameid[i], unsigned short, rd.items[i]);
++		RECREATE(rd.qty[i], unsigned short, rd.items[i]);
++		RECREATE(rd.flag[i], int, rd.items[i]);
++
++		for (j = 0; j < MAX_ROULETTE_COLUMNS - i; j++) {
++			if (rd.qty[i][j])
++				continue;
++
++			rd.nameid[i][j] = ITEMID_APPLE;
++			rd.qty[i][j] = 1;
++			rd.flag[i][j] = 0;
++		}
++	}
++
++	ShowStatus("Done reading '"CL_WHITE"%lu"CL_RESET"' entries in '"CL_WHITE"%s"CL_RESET"'.\n", count, db_roulette_table);
++
++	return true;
++}
++
++/**
++ * Free Roulette items
++ */
++static void itemdb_roulette_free(void) {
++	int i;
++	for (i = 0; i < MAX_ROULETTE_LEVEL; i++) {
++		if (rd.nameid[i])
++			aFree(rd.nameid[i]);
++		if (rd.qty[i])
++			aFree(rd.qty[i]);
++		if (rd.flag[i])
++			aFree(rd.flag[i]);
++		rd.nameid[i] = NULL;
++		rd.qty[i] = NULL;
++		rd.flag[i] = NULL;
++		rd.items[i] = 0;
++	}
++}
+ 
+ /*======================================
+  * Applies gender restrictions according to settings. [Skotlex]
+@@ -1082,11 +1194,17 @@ void itemdb_reload(void)
+ 
+ 	itemdb_other->clear(itemdb_other, itemdb_final_sub);
+ 
++	if (battle_config.feature_roulette)
++		itemdb_roulette_free();
++
+ 	memset(itemdb_array, 0, sizeof(itemdb_array));
+ 
+ 	// read new data
+ 	itemdb_read();
+ 
++	if (battle_config.feature_roulette)
++		itemdb_parse_roulette_db();
++
+ 	// readjust itemdb pointer cache for each player
+ 	iter = mapit_geteachpc();
+ 	for( sd = (struct map_session_data*)mapit_first(iter); mapit_exists(iter); sd = (struct map_session_data*)mapit_next(iter) )
+@@ -1107,6 +1225,8 @@ void do_final_itemdb(void)
+ 
+ 	itemdb_other->destroy(itemdb_other, itemdb_final_sub);
+ 	destroy_item_data(&dummy_item, 0);
++	if (battle_config.feature_roulette)
++		itemdb_roulette_free();
+ }
+ 
+ int do_init_itemdb(void)
+@@ -1116,5 +1236,8 @@ int do_init_itemdb(void)
+ 	create_dummy_data(); //Dummy data item.
+ 	itemdb_read();
+ 
++	if (battle_config.feature_roulette)
++		itemdb_parse_roulette_db();
++
+ 	return 0;
+ }
+diff --git a/rewrite/src/map/itemdb.h b/rewrite/src/map/itemdb.h
+index e2cd4e4..2a86b6d 100644
+--- a/rewrite/src/map/itemdb.h
++++ b/rewrite/src/map/itemdb.h
+@@ -11,10 +11,17 @@
+ // The maximum number of item delays
+ #define MAX_ITEMDELAYS	10
+ 
++#define MAX_ROULETTE_LEVEL 7 // client-defined value
++#define MAX_ROULETTE_COLUMNS 9 // client-defined value
++
+ #define MAX_SEARCH	5  //Designed for search functions, species max number of matches to display.
+ 
+ enum item_itemid
+ {
++	ITEMID_YELLOW_POTION = 503,
++	ITEMID_WHITE_POTION = 504,
++	ITEMID_BLUE_POTION = 505,
++	ITEMID_APPLE = 512,
+ 	ITEMID_HOLY_WATER = 523,
+ 	ITEMID_EMPERIUM = 714,
+ 	ITEMID_YELLOW_GEMSTONE = 715,
+@@ -174,6 +181,15 @@ enum item_itemid
+ //Use apple for unknown items.
+ #define UNKNOWN_ITEM_ID 512
+ 
++
++// Struct of Roulette db
++struct s_roulette_db {
++	unsigned short *nameid[MAX_ROULETTE_LEVEL], /// Item ID
++		           *qty[MAX_ROULETTE_LEVEL]; /// Amount of Item ID
++	int *flag[MAX_ROULETTE_LEVEL]; /// Whether the item is for loss or win
++	int items[MAX_ROULETTE_LEVEL]; /// Number of items in the list for each
++} rd;
++
+ struct item_data {
+ 	int nameid;
+ 	char name[ITEM_NAME_LENGTH],jname[ITEM_NAME_LENGTH];
+@@ -274,6 +290,8 @@ int itemdb_isidentified(int);
+ int itemdb_isstackable(int);
+ int itemdb_isstackable2(struct item_data *);
+ 
++bool itemdb_parse_roulette_db(void);
++
+ void itemdb_reload(void);
+ 
+ void do_final_itemdb(void);
+diff --git a/rewrite/src/map/log.h b/rewrite/src/map/log.h
+index f882364..1f89fd5 100644
+--- a/rewrite/src/map/log.h
++++ b/rewrite/src/map/log.h
+@@ -25,6 +25,7 @@ int log_mvpdrop(struct map_session_data *sd, int monster_id, int *log_mvp);
+ int log_config_read(char *cfgName);
+ 
+ typedef enum log_what {
++	LOG_NONE                = 0,
+ 	LOG_ALL                 = 0xFFFF,
+ 	LOG_TRADES              = 0x0002,
+ 	LOG_VENDING             = 0x0004,
+@@ -40,6 +41,7 @@ typedef enum log_what {
+ 	LOG_GSTORAGE_ITEMS      = 0x1000, // placed/retrieved from guild storage
+ 	LOG_MAILS               = 0x2000, // mail system transactions
+ 	LOG_BUYING_STORE        = 0x4000, // buying store transactions
++	LOG_ROULETTE            = 0x8000,
+ } log_what;
+ 
+ extern struct Log_Config {
+diff --git a/rewrite/src/map/map.c b/rewrite/src/map/map.c
+index 13cb1b5..841fd23 100644
+--- a/rewrite/src/map/map.c
++++ b/rewrite/src/map/map.c
+@@ -72,6 +72,7 @@ char item_db_custom_db[32] = "item_db_custom";
+ char mob_db_db[32] = "mob_db";
+ char mob_db_3ceam_db[32] = "mob_db_3ceam";
+ char mob_db_custom_db[32] = "mob_db_custom";
++char db_roulette_table[32] = "db_roulette";
+ 
+ // log database
+ char log_db_ip[32] = "127.0.0.1";
+@@ -3459,6 +3460,9 @@ int inter_config_read(char *cfgName)
+ 		if(strcmpi(w1,"mob_db_custom_db")==0)
+ 			strcpy(mob_db_custom_db,w2);
+ 		else
++		if( strcmpi(w1, "db_roulette_table") == 0)
++			strcpy(db_roulette_table, w2);
++		else
+ 		//Map Server SQL DB
+ 		if(strcmpi(w1,"map_server_ip")==0)
+ 			strcpy(map_server_ip, w2);
+diff --git a/rewrite/src/map/map.h b/rewrite/src/map/map.h
+index 36a04cc..b0b8ee7 100644
+--- a/rewrite/src/map/map.h
++++ b/rewrite/src/map/map.h
+@@ -358,6 +358,9 @@ enum _sp {
+ 	SP_BASECLASS=120,	//Hmm.. why 100+19? I just use the next one... [Skotlex]
+ 	SP_KILLERRID=121,
+ 	SP_KILLEDRID=122,
++	SP_ROULETTE_BRONZE = 123,
++	SP_ROULETTE_SILVER = 124,
++	SP_ROULETTE_GOLD = 125,
+ 
+ 	// Mercenaries
+ 	SP_MERCFLEE=165, SP_MERCKILLS=189, SP_MERCFAITH=190,
+@@ -760,6 +763,7 @@ extern char item_db_custom_db[32];
+ extern char mob_db_db[32];
+ extern char mob_db_3ceam_db[32];
+ extern char mob_db_custom_db[32];
++extern char db_roulette_table[32];
+ 
+ #endif /* not TXT_ONLY */
+ 
+diff --git a/rewrite/src/map/mob.c b/rewrite/src/map/mob.c
+index 366bc43..b3df575 100644
+--- a/rewrite/src/map/mob.c
++++ b/rewrite/src/map/mob.c
+@@ -3053,7 +3053,7 @@ int mobskill_use(struct mob_data *md, unsigned int tick, int event)
+  			snprintf(name, sizeof name,"%s", md->name);
+  			strtok(name, "#"); // discard extra name identifier if present [Daegaladh]
+  			snprintf(temp, sizeof temp,"%s : %s", name, mc->msg);
+-			clif_messagecolor(&md->bl, mc->color, temp);
++			clif_disp_overheadcolor(&md->bl, mc->color, temp);
+ 		}
+ 		
+ 		//Execute skill	
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index 5c1bbac..3f1cdf6 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -1404,6 +1404,14 @@ int pc_reg_received(struct map_session_data *sd)
+ 		sd->mission_count = pc_readglobalreg(sd,"TK_MISSION_COUNT");
+ 	}
+ 
++	if (battle_config.feature_roulette)
++	{
++		sd->roulette_point.bronze = pc_readglobalreg(sd, ROULETTE_BRONZE_VAR);
++		sd->roulette_point.silver = pc_readglobalreg(sd, ROULETTE_SILVER_VAR);
++		sd->roulette_point.gold = pc_readglobalreg(sd, ROULETTE_GOLD_VAR);
++	}
++	sd->roulette.prizeIdx = -1;
++
+ 	//SG map and mob read [Komurka]
+ 	for(i=0;i<MAX_PC_FEELHATE;i++) //for now - someone need to make reading from txt/sql
+ 	{
+@@ -6964,38 +6972,41 @@ int pc_readparam(struct map_session_data* sd,int type)
+ 	nullpo_ret(sd);
+ 
+ 	switch(type) {
+-	case SP_SKILLPOINT:  val = sd->status.skill_point; break;
+-	case SP_STATUSPOINT: val = sd->status.status_point; break;
+-	case SP_ZENY:        val = sd->status.zeny; break;
+-	case SP_BASELEVEL:   val = sd->status.base_level; break;
+-	case SP_JOBLEVEL:    val = sd->status.job_level; break;
+-	case SP_CLASS:       val = sd->status.class_; break;
+-	case SP_BASECLASS:   val = pc_mapid2jobid(sd->class_&MAPID_BASEMASK, sd->status.sex); break;//Checking 1st jobs.
+-	case SP_BASEJOB:     val = pc_mapid2jobid(sd->class_&MAPID_UPPERMASK, sd->status.sex); break;//Checking 2st jobs.
+-	case SP_BASETHIRD:   val = pc_mapid2jobid(sd->class_&MAPID_THIRDMASK, sd->status.sex); break;//Checking 3st jobs.
+-	case SP_UPPER:       val = sd->class_&JOBL_UPPER?1:(sd->class_&JOBL_BABY?2:0); break;//Checking if a job is trans or baby.
+-	case SP_SEX:         val = sd->status.sex; break;
+-	case SP_WEIGHT:      val = sd->weight; break; // client shows value/10
+-	case SP_MAXWEIGHT:   val = sd->max_weight; break; // client shows value/10
+-	case SP_BASEEXP:     val = sd->status.base_exp; break;
+-	case SP_JOBEXP:      val = sd->status.job_exp; break;
+-	case SP_NEXTBASEEXP: val = pc_nextbaseexp(sd); break;
+-	case SP_NEXTJOBEXP:  val = pc_nextjobexp(sd); break;
+-	case SP_HP:          val = sd->battle_status.hp; break;
+-	case SP_MAXHP:       val = sd->battle_status.max_hp; break;
+-	case SP_SP:          val = sd->battle_status.sp; break;
+-	case SP_MAXSP:       val = sd->battle_status.max_sp; break;
+-	case SP_STR:         val = sd->status.str; break;
+-	case SP_AGI:         val = sd->status.agi; break;
+-	case SP_VIT:         val = sd->status.vit; break;
+-	case SP_INT:         val = sd->status.int_; break;
+-	case SP_DEX:         val = sd->status.dex; break;
+-	case SP_LUK:         val = sd->status.luk; break;
+-	case SP_KARMA:       val = sd->status.karma; break;
+-	case SP_MANNER:      val = sd->status.manner; break;
+-	case SP_FAME:        val = sd->status.fame; break;
+-	case SP_KILLERRID:   val = sd->killerrid; break;
+-	case SP_KILLEDRID:   val = sd->killedrid; break;
++	case SP_SKILLPOINT:			val = sd->status.skill_point; break;
++	case SP_STATUSPOINT:		val = sd->status.status_point; break;
++	case SP_ZENY:				val = sd->status.zeny; break;
++	case SP_BASELEVEL:			val = sd->status.base_level; break;
++	case SP_JOBLEVEL:			val = sd->status.job_level; break;
++	case SP_CLASS:				val = sd->status.class_; break;
++	case SP_BASECLASS:			val = pc_mapid2jobid(sd->class_&MAPID_BASEMASK, sd->status.sex); break;//Checking 1st jobs.
++	case SP_BASEJOB:			val = pc_mapid2jobid(sd->class_&MAPID_UPPERMASK, sd->status.sex); break;//Checking 2st jobs.
++	case SP_BASETHIRD:			val = pc_mapid2jobid(sd->class_&MAPID_THIRDMASK, sd->status.sex); break;//Checking 3st jobs.
++	case SP_UPPER:				val = sd->class_&JOBL_UPPER?1:(sd->class_&JOBL_BABY?2:0); break;//Checking if a job is trans or baby.
++	case SP_SEX:				val = sd->status.sex; break;
++	case SP_WEIGHT:				val = sd->weight; break; // client shows value/10
++	case SP_MAXWEIGHT:			val = sd->max_weight; break; // client shows value/10
++	case SP_BASEEXP:			val = sd->status.base_exp; break;
++	case SP_JOBEXP:				val = sd->status.job_exp; break;
++	case SP_NEXTBASEEXP:		val = pc_nextbaseexp(sd); break;
++	case SP_NEXTJOBEXP:			val = pc_nextjobexp(sd); break;
++	case SP_HP:					val = sd->battle_status.hp; break;
++	case SP_MAXHP:				val = sd->battle_status.max_hp; break;
++	case SP_SP:					val = sd->battle_status.sp; break;
++	case SP_MAXSP:				val = sd->battle_status.max_sp; break;
++	case SP_STR:				val = sd->status.str; break;
++	case SP_AGI:				val = sd->status.agi; break;
++	case SP_VIT:				val = sd->status.vit; break;
++	case SP_INT:				val = sd->status.int_; break;
++	case SP_DEX:				val = sd->status.dex; break;
++	case SP_LUK:				val = sd->status.luk; break;
++	case SP_KARMA:				val = sd->status.karma; break;
++	case SP_MANNER:				val = sd->status.manner; break;
++	case SP_FAME:				val = sd->status.fame; break;
++	case SP_KILLERRID:			val = sd->killerrid; break;
++	case SP_KILLEDRID:			val = sd->killedrid; break;
++	case SP_ROULETTE_BRONZE:	val = sd->roulette_point.bronze; break;
++	case SP_ROULETTE_SILVER:	val = sd->roulette_point.silver; break;
++	case SP_ROULETTE_GOLD:		val = sd->roulette_point.gold; break;
+ 
+ 	// 3CeAM Custom Detections
+ 	// The pc_readparam function is normally just used
+@@ -7133,6 +7144,18 @@ int pc_setparam(struct map_session_data *sd,int type,int val)
+ 	case SP_KILLEDRID:
+ 		sd->killedrid = val;
+ 		return 1;
++	case SP_ROULETTE_BRONZE:
++		sd->roulette_point.bronze = val;
++		pc_setglobalreg(sd, ROULETTE_BRONZE_VAR, sd->roulette_point.bronze);
++		return 1;
++	case SP_ROULETTE_SILVER:
++		sd->roulette_point.silver = val;
++		pc_setglobalreg(sd, ROULETTE_SILVER_VAR, sd->roulette_point.silver);
++		return 1;
++	case SP_ROULETTE_GOLD:
++		sd->roulette_point.gold = val;
++		pc_setglobalreg(sd, ROULETTE_GOLD_VAR, sd->roulette_point.gold);
++		return 1;
+ 	default:
+ 		ShowError("pc_setparam: Attempted to set unknown parameter '%d'.\n", type);
+ 		return 0;
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 29d1696..140f12e 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -22,6 +22,10 @@
+ #define MAX_PC_SKILL_REQUIRE 5
+ #define MAX_PC_FEELHATE 3
+ 
++#define ROULETTE_BRONZE_VAR "RouletteBronze"
++#define ROULETTE_SILVER_VAR "RouletteSilver"
++#define ROULETTE_GOLD_VAR "RouletteGold"
++
+ #define MAX_RUNE 20
+ #define MAX_RAGE 15
+ #define MAX_SPELLBOOK 7
+@@ -451,6 +455,17 @@ struct map_session_data {
+ 	int debug_line;
+ 	const char* debug_func;
+ 	int shadowform_id;
++
++	struct {
++		int bronze, silver, gold; ///< Roulette Coin
++	} roulette_point;
++
++	struct {
++		short stage;
++		int8 prizeIdx;
++		short prizeStage;
++		bool claimPrize;
++	} roulette;
+ };
+ 
+ //Update this max as necessary. Raised from 80 to 84 as the Expanded Super Novice needs it. [Rytech]
+diff --git a/rewrite/src/map/quest.c b/rewrite/src/map/quest.c
+index 4c890ce..defd42b 100644
+--- a/rewrite/src/map/quest.c
++++ b/rewrite/src/map/quest.c
+@@ -55,7 +55,9 @@ int quest_pc_login(TBL_PC * sd)
+ 		return 1;
+ 
+ 	clif_quest_send_list(sd);
++#if PACKETVER < 20141022
+ 	clif_quest_send_mission(sd);
++#endif
+ 
+ 	return 0;
+ }
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index 48ea068..6094ed2 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -166,6 +166,28 @@
+ #define SCRIPT_BLOCK_SIZE 512
+ enum { LABEL_NEXTLINE=1,LABEL_START };
+ 
++TBL_PC *script_rid2sd(struct script_state *st);
++
++/**
++ * Get `sd` from a char id in `loc` param instead of attached rid
++ * @param st Script
++ * @param loc Location to look char id in script parameter
++ * @param sd Variable that will be assigned
++ * @return True if `sd` is assigned, false otherwise
++ **/
++static bool script_charid2sd_(struct script_state *st, uint8 loc, struct map_session_data **sd, const char *func) {
++	if (script_hasdata(st, loc)) {
++		int id_ = script_getnum(st, loc);
++		if (!(*sd = map_charid2sd(id_)))
++			ShowError("%s: Player with char id '%d' is not found.\n", func, id_);
++	}
++	else
++		*sd = script_rid2sd(st);
++	return (*sd) ? true : false;
++}
++
++#define script_charid2sd(loc,sd) script_charid2sd_(st,(loc),&(sd),__FUNCTION__)
++
+ /// temporary buffer for passing around compiled bytecode
+ /// @see add_scriptb, set_label, parse_script
+ static unsigned char* script_buf = NULL;
+@@ -9435,18 +9457,51 @@ BUILDIN_FUNC(changebase)
+ }
+ 
+ /*==========================================
+- * «•Ê•ÏŠ·
++ * Change account sex and unequip all item and request for a changesex to char-serv 
+  *------------------------------------------*/
+ BUILDIN_FUNC(changesex)
+ {
++	int i;
+ 	TBL_PC *sd = NULL;
+ 	sd = script_rid2sd(st);
+ 
+-	chrif_changesex(sd);
++	// to avoid any problem with equipment and invalid sex, equipment is unequiped.
++	for(i = 0; i < EQI_MAX; i++) {
++		if (sd->equip_index[i] >= 0)
++			pc_unequipitem(sd, sd->equip_index[i], 3);
++	}
++
++	chrif_changesex(sd, true);
+ 	return 0;
+ }
+ 
+ /*==========================================
++ * Change character's sex and unequip all item and request for a changesex to char-serv
++ *------------------------------------------*/
++BUILDIN_FUNC(changecharsex)
++{
++#if PACKETVER >= 20141016
++	int i;
++	TBL_PC *sd = NULL;
++
++	if (!script_charid2sd(2,sd))
++		return 1;
++
++	pc_resetskill(sd,4);
++	// to avoid any problem with equipment and invalid sex, equipment is unequiped.
++	for (i = 0; i < EQI_MAX; i++) {
++		if (sd->equip_index[i] >= 0)
++			pc_unequipitem(sd, sd->equip_index[i], 3);
++	}
++
++	chrif_changesex(sd, false);
++	return 0;
++#else
++	return 1;
++#endif
++}
++
++/*==========================================
+  * Works like 'announce' but outputs in the common chat window
+  *------------------------------------------*/
+ BUILDIN_FUNC(globalmes)
+@@ -12016,7 +12071,7 @@ BUILDIN_FUNC(npctalk)
+ 		safestrncpy(name, nd->name, sizeof(name));
+ 		strtok(name, "#"); // discard extra name identifier if present
+ 		safesnprintf(message, sizeof(message), "%s : %s", name, str);
+-		clif_message(&nd->bl, message);
++		clif_disp_overhead(&nd->bl, message);
+ 	}
+ 
+ 	return 0;
+@@ -13694,7 +13749,7 @@ BUILDIN_FUNC(unittalk)
+ 		struct StringBuf sbuf;
+ 		StringBuf_Init(&sbuf);
+ 		StringBuf_Printf(&sbuf, "%s : %s", status_get_name(bl), message);
+-		clif_message(bl, StringBuf_Value(&sbuf));
++		clif_disp_overhead(bl, StringBuf_Value(&sbuf));
+ 		if( bl->type == BL_PC )
+ 			clif_displaymessage(((TBL_PC*)bl)->fd, StringBuf_Value(&sbuf));
+ 		StringBuf_Destroy(&sbuf);
+@@ -15248,6 +15303,7 @@ struct script_function buildin_func[] = {
+ 	BUILDIN_DEF(skillpointcount,""),
+ 	BUILDIN_DEF(changebase,"i?"),
+ 	BUILDIN_DEF(changesex,""),
++	BUILDIN_DEF(changecharsex,"?"),
+ 	BUILDIN_DEF(waitingroom,"si?????"),
+ 	BUILDIN_DEF(delwaitingroom,"?"),
+ 	BUILDIN_DEF2(waitingroomkickall,"kickwaitingroomall","?"),
+diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
+index c3aab22..3dc3bd2 100644
+--- a/rewrite/src/map/skill.c
++++ b/rewrite/src/map/skill.c
+@@ -6091,7 +6091,7 @@ int skill_castend_nodamage_id (struct block_list *src, struct block_list *bl, in
+ 			//NOTE: mobs don't have the sprite animation that is used when performing this skill (will cause glitches)
+ 			char temp[70];
+ 			snprintf(temp, sizeof(temp), "%s : %s !!",md->name,skill_db[skillid].desc);
+-			clif_message(&md->bl,temp);
++			clif_disp_overhead(&md->bl,temp);
+ 		}
+ 		break;
+ 
+diff --git a/rewrite/src/map/status.c b/rewrite/src/map/status.c
+index 8bc79f1..00f7923 100644
+--- a/rewrite/src/map/status.c
++++ b/rewrite/src/map/status.c
+@@ -10012,7 +10012,7 @@ int status_change_timer(int tid, unsigned int tick, int id, intptr data)
+ 		//if (sce->val4 % 1000 == 0) {
+ 		//	char timer[10];
+ 		//	snprintf (timer, 10, "%d", sce->val4/1000);
+-		//	clif_message(bl, timer);
++		//	clif_disp_overhead(bl, timer);
+ 		//}
+ 		if((sce->val4 -= 500) > 0) {
+ 			sc_timer_next(500 + tick, status_change_timer, bl->id, data);
+diff --git a/rewrite/src/map/status.h b/rewrite/src/map/status.h
+index bd109dd..3195d9e 100644
+--- a/rewrite/src/map/status.h
++++ b/rewrite/src/map/status.h
+@@ -1800,47 +1800,6 @@ enum {
+ 	OPT3_CONTRACT         = 0x00020000,
+ };
+ 
+-//OPTION: (EFFECTSTATE_)
+-enum {
+-	OPTION_NOTHING     = 0x00000000,
+-	OPTION_SIGHT       = 0x00000001,
+-	OPTION_HIDE        = 0x00000002,
+-	OPTION_CLOAK       = 0x00000004,
+-	OPTION_CART1       = 0x00000008,
+-	OPTION_FALCON      = 0x00000010,
+-	OPTION_RIDING      = 0x00000020,
+-	OPTION_INVISIBLE   = 0x00000040,
+-	OPTION_CART2       = 0x00000080,
+-	OPTION_CART3       = 0x00000100,
+-	OPTION_CART4       = 0x00000200,
+-	OPTION_CART5       = 0x00000400,
+-	OPTION_ORCISH      = 0x00000800,
+-	OPTION_WEDDING     = 0x00001000,
+-	OPTION_RUWACH      = 0x00002000,
+-	OPTION_CHASEWALK   = 0x00004000,
+-	OPTION_FLYING      = 0x00008000, //Note that clientside Flying and Xmas are 0x8000 for clients prior to 2007.
+-	OPTION_XMAS        = 0x00010000,
+-	OPTION_TRANSFORM   = 0x00020000,
+-	OPTION_SUMMER      = 0x00040000,
+-	OPTION_DRAGON1     = 0x00080000,
+-	OPTION_WUG         = 0x00100000,
+-	OPTION_WUGRIDER    = 0x00200000,
+-	OPTION_MADOGEAR    = 0x00400000,
+-	OPTION_DRAGON2     = 0x00800000,
+-	OPTION_DRAGON3     = 0x01000000,
+-	OPTION_DRAGON4     = 0x02000000,
+-	OPTION_DRAGON5     = 0x04000000,
+-	OPTION_HANBOK      = 0x08000000,
+-	OPTION_OKTOBERFEST = 0x10000000,
+-	OPTION_SUMMER2     = 0x20000000,// Fix me. I exist, but not like this.
+-};
+-
+-#define OPTION_CART (OPTION_CART1|OPTION_CART2|OPTION_CART3|OPTION_CART4|OPTION_CART5)
+-#define OPTION_DRAGON (OPTION_DRAGON1|OPTION_DRAGON2|OPTION_DRAGON3|OPTION_DRAGON4|OPTION_DRAGON5)
+-#define OPTION_COSTUME (OPTION_WEDDING|OPTION_XMAS|OPTION_SUMMER|OPTION_HANBOK|OPTION_OKTOBERFEST|OPTION_SUMMER2)
+-
+-#define OPTION_MASK ~0x40
+-
+ //Defines for the manner system [Skotlex]
+ #define MANNER_NOCHAT 0x01
+ #define MANNER_NOSKILL 0x02
+diff --git a/rewrite/src/map/vending.c b/rewrite/src/map/vending.c
+index 3755799..d129dbe 100644
+--- a/rewrite/src/map/vending.c
++++ b/rewrite/src/map/vending.c
+@@ -106,6 +106,7 @@ void vending_purchasereq(struct map_session_data* sd, int aid, int uid, const ui
+ 		short amount = *(uint16*)(data + 4*i + 0);
+ 		short idx    = *(uint16*)(data + 4*i + 2);
+ 		idx -= 2;
++		z = 0.; // zeny counter
+ 
+ 		if( amount <= 0 )
+ 			return;
+@@ -191,8 +192,11 @@ void vending_purchasereq(struct map_session_data* sd, int aid, int uid, const ui
+ 		// vending item
+ 		pc_additem(sd, &vsd->status.cart[idx], amount);
+ 		vsd->vending[vend_list[i]].amount -= amount;
++		z += ((double)vsd->vending[i].value * (double)amount);
+ 		pc_cart_delitem(vsd, idx, amount, 0);
+-		clif_vendingreport(vsd, idx, amount);
++		if( battle_config.vending_tax )
++			z -= z * (battle_config.vending_tax/10000.);
++		clif_vendingreport(vsd, idx, amount, sd->status.char_id, (int)z);
+ 
+ 		//print buyer's name
+ 		if( battle_config.buyer_name )
