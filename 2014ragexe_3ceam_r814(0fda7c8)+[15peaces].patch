@@ -6,14 +6,14 @@
  rewrite/conf/msg_athena.conf                       |   4 +
  rewrite/db/const.txt                               |   3 +
  rewrite/db/item_db.txt                             |   6 +-
- rewrite/db/packet_db.txt                           | 135 ++++-
+ rewrite/db/packet_db.txt                           | 135 +++-
  rewrite/doc/script_commands.txt                    |  14 +
- .../sql-files/3CeAM_2014client_patch[15peaces].sql |  65 +++
+ .../sql-files/3CeAM_2014client_patch[15peaces].sql |  65 ++
  .../3CeAM_2014client_patch_log[15peaces].sql       |   1 +
- rewrite/sql-files/main.sql                         |  68 +++
+ rewrite/sql-files/main.sql                         |  68 ++
  rewrite/src/char/char.c                            |  36 +-
  rewrite/src/char/char.h                            |   2 +
- rewrite/src/char_sql/char.c                        | 566 ++++++++++++---------
+ rewrite/src/char_sql/char.c                        | 566 ++++++++++-------
  rewrite/src/char_sql/char.h                        |   3 +
  rewrite/src/common/mmo.h                           |  46 +-
  rewrite/src/map/atcommand.c                        |  46 +-
@@ -22,23 +22,23 @@
  rewrite/src/map/buyingstore.c                      |   2 +-
  rewrite/src/map/chrif.c                            |  12 +-
  rewrite/src/map/chrif.h                            |   2 +-
- rewrite/src/map/clif.c                             | 530 +++++++++++++++----
- rewrite/src/map/clif.h                             |  62 ++-
- rewrite/src/map/itemdb.c                           | 123 +++++
+ rewrite/src/map/clif.c                             | 686 ++++++++++++++++-----
+ rewrite/src/map/clif.h                             |  64 +-
+ rewrite/src/map/itemdb.c                           | 123 ++++
  rewrite/src/map/itemdb.h                           |  18 +
  rewrite/src/map/log.h                              |   2 +
  rewrite/src/map/map.c                              |   4 +
  rewrite/src/map/map.h                              |   4 +
  rewrite/src/map/mob.c                              |   2 +-
- rewrite/src/map/pc.c                               |  87 ++--
+ rewrite/src/map/pc.c                               |  87 ++-
  rewrite/src/map/pc.h                               |  15 +
  rewrite/src/map/quest.c                            |   2 +
- rewrite/src/map/script.c                           |  64 ++-
+ rewrite/src/map/script.c                           |  64 +-
  rewrite/src/map/skill.c                            |   2 +-
  rewrite/src/map/status.c                           |   2 +-
  rewrite/src/map/status.h                           |  41 --
  rewrite/src/map/vending.c                          |   6 +-
- 40 files changed, 1519 insertions(+), 484 deletions(-)
+ 40 files changed, 1625 insertions(+), 536 deletions(-)
 
 diff --git a/rewrite/conf/atcommand_athena.conf b/rewrite/conf/atcommand_athena.conf
 index 9e2d867..12aba4f 100644
@@ -630,7 +630,7 @@ index 18bb7b1..fe99d5c 100644
 +
  #endif /* _CHAR_H_ */
 diff --git a/rewrite/src/char_sql/char.c b/rewrite/src/char_sql/char.c
-index 9e7b8c4..8ea1de2 100644
+index 9e7b8c4..f589a74 100644
 --- a/rewrite/src/char_sql/char.c
 +++ b/rewrite/src/char_sql/char.c
 @@ -479,7 +479,7 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
@@ -647,7 +647,7 @@ index 9e7b8c4..8ea1de2 100644
  			"`weapon`='%d',`shield`='%d',`head_top`='%d',`head_mid`='%d',`head_bottom`='%d',`robe`='%d',"
  			"`last_map`='%s',`last_x`='%d',`last_y`='%d',`save_map`='%s',`save_x`='%d',`save_y`='%d', `rename`='%d',"
 -			"`delete_date`='%lu'"
-+			"`delete_date`='%lu , `hotkey_rowshift`='%d'"
++			"`delete_date`='%lu' , `hotkey_rowshift`='%d'"
  			" WHERE  `account_id`='%d' AND `char_id` = '%d'",
  			char_db, p->base_level, p->job_level,
  			p->base_exp, p->job_exp, p->zeny,
@@ -1641,7 +1641,7 @@ index 5c0be5c..a5a1ed2 100644
  int check_connect_char_server(int tid, unsigned int tick, int id, intptr data);
  int chrif_divorce(int partner_id1, int partner_id2);
 diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
-index 75d2dab..45ef9a3 100644
+index 75d2dab..d769d63 100644
 --- a/rewrite/src/map/clif.c
 +++ b/rewrite/src/map/clif.c
 @@ -562,6 +562,8 @@ int clif_authok(struct map_session_data *sd)
@@ -1664,7 +1664,101 @@ index 75d2dab..45ef9a3 100644
  	WFIFOSET(fd,packet_len(cmd));
  
  	return 0;
-@@ -6396,32 +6400,30 @@ void clif_status_change_single(struct block_list *dst, struct block_list *bl, in
+@@ -1541,34 +1545,35 @@ int clif_spawn(struct block_list *bl)
+ 	return 0;
+ }
+ 
+-//[orn]
+-int clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag)
++/// Sends information about owned homunculus to the client (ZC_PROPERTY_HOMUN). [orn]
++/// 022e <name>.24B <modified>.B <level>.W <hunger>.W <intimacy>.W <equip id>.W <atk>.W <matk>.W <hit>.W <crit>.W <def>.W <mdef>.W <flee>.W <aspd>.W <hp>.W <max hp>.W <sp>.W <max sp>.W <exp>.L <max exp>.L <skill points>.W <atk range>.W
++/// 09f7 <name>.24B <modified>.B <level>.W <hunger>.W <intimacy>.W <equip id>.W <atk>.W <matk>.W <hit>.W <crit>.W <def>.W <mdef>.W <flee>.W <aspd>.W <hp>.L <max hp>.L <sp>.W <max sp>.W <exp>.L <max exp>.L <skill points>.W <atk range>.W (ZC_PROPERTY_HOMUN_2)
++ void clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag)
+ {
+ 	struct status_data *status;
+ 	unsigned char buf[128];
+-	short PacketType;
+-	
+-	nullpo_ret(hd);
+ 
+-#if PACKETVER < 20141223
+-	PacketType = 0x22e;
++#if PACKETVER < 20141016
++	const int cmd = 0x22e;
+ #else
+-	PacketType = 0x9f7;
++	const int cmd = 0x9f7;
+ #endif
+ 
++	nullpo_retv(hd);
++
+ 	status = &hd->battle_status;
+-	memset(buf,0,packet_len(PacketType));
+-	WBUFW(buf,0)=PacketType;
+-	memcpy(WBUFP(buf,2),hd->homunculus.name,NAME_LENGTH);
++	memset(buf, 0, packet_len(cmd));
++	WBUFW(buf, 0) = cmd;
++	memcpy(WBUFP(buf, 2), hd->homunculus.name, NAME_LENGTH);
+ 	// Bit field, bit 0 : rename_flag (1 = already renamed), bit 1 : homunc vaporized (1 = true), bit 2 : homunc dead (1 = true)
+-	WBUFB(buf,26)=(battle_config.hom_rename?0:hd->homunculus.rename_flag) | (hd->homunculus.vaporize << 1) | (hd->homunculus.hp?0:4);
+-	WBUFW(buf,27)=hd->homunculus.level;
+-	WBUFW(buf,29)=hd->homunculus.hunger;
+-	WBUFW(buf,31)=(unsigned short) (hd->homunculus.intimacy / 100) ;
+-	WBUFW(buf,33)=0; // equip id
+-	WBUFW(buf,35)=cap_value(status->rhw.atk2+status->batk, 0, SHRT_MAX);
+-	WBUFW(buf,37)=cap_value(status->matk_max, 0, SHRT_MAX);
+-	WBUFW(buf,39)=status->hit;
++	WBUFB(buf, 26) = (battle_config.hom_rename ? 0 : hd->homunculus.rename_flag) | (hd->homunculus.vaporize << 1) | (hd->homunculus.hp ? 0 : 4);
++	WBUFW(buf, 27) = hd->homunculus.level;
++	WBUFW(buf, 29) = hd->homunculus.hunger;
++	WBUFW(buf, 31) = (unsigned short) (hd->homunculus.intimacy / 100) ;
++	WBUFW(buf, 33) = 0; // equip id
++	WBUFW(buf, 35) = cap_value(status->rhw.atk2+status->batk, 0, SHRT_MAX);
++	WBUFW(buf, 37) = cap_value(status->matk_max, 0, SHRT_MAX);
++	WBUFW(buf, 39) = status->hit;
+ 	if (battle_config.hom_setting&0x10)
+ 		WBUFW(buf,41)=status->luk/3 + 1;	//crit is a +1 decimal value! Just display purpose.[Vicious]
+ 	else
+@@ -1578,8 +1583,7 @@ int clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag)
+ 	WBUFW(buf,47)=status->flee;
+ 	WBUFW(buf,49)=(flag)?0:status->amotion;
+ 
+-
+-#if PACKETVER < 20141223
++#if PACKETVER < 20141016
+ 	if (status->max_hp > SHRT_MAX) {
+ 		WBUFW(buf,51) = status->hp/(status->max_hp/100);
+ 		WBUFW(buf,53) = 100;
+@@ -1599,8 +1603,15 @@ int clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag)
+ 	WBUFW(buf,67)=hd->homunculus.skillpts;
+ 	WBUFW(buf,69)=status_get_range(&hd->bl);
+ #else
+-		WBUFL(buf,51)=status->hp;
+-		WBUFL(buf,55)=status->max_hp;
++	// Homunculus HP bar will screw up if the percentage calculation exceeds signed values
++	// Tested maximum: 21474836(=INT32_MAX/100), any value above will screw up the HP bar
++	if (status->max_hp > (INT_MAX/100)) {
++		WBUFL(buf,51) = status->hp/(status->max_hp/100);
++		WBUFL(buf,55) = 100;
++	} else {
++		WBUFL(buf,51) = status->hp;
++		WBUFL(buf,55) = status->max_hp;
++	}
+ 	if (status->max_sp > SHRT_MAX) {
+ 		WBUFW(buf,59) = status->sp/(status->max_sp/100);
+ 		WBUFW(buf,61) = 100;
+@@ -1613,8 +1624,8 @@ int clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag)
+ 	WBUFW(buf,71)=hd->homunculus.skillpts;
+ 	WBUFW(buf,73)=status_get_range(&hd->bl);
+ #endif
+-	clif_send(buf,packet_len(PacketType),&sd->bl,SELF);
+-	return 0;
++	clif_send(buf,packet_len(cmd),&sd->bl,SELF);
++	return;
+ }
+ 
+ void clif_send_homdata(struct map_session_data *sd, int type, int param)
+@@ -6396,32 +6407,30 @@ void clif_status_change_single(struct block_list *dst, struct block_list *bl, in
  	clif_send(buf,packet_len(WBUFW(buf,0)),dst,SELF);
  }
  
@@ -1715,12 +1809,12 @@ index 75d2dab..45ef9a3 100644
  }
  
  /*==========================================
-@@ -7290,25 +7292,34 @@ void clif_openvending(struct map_session_data* sd, int id, struct s_vending* ven
+@@ -7290,25 +7299,34 @@ void clif_openvending(struct map_session_data* sd, int id, struct s_vending* ven
  	}
  	WFIFOSET(fd,WFIFOW(fd,2));
  
 -#if PACKETVER >= 20150513
-+#if PACKETVER >= 20141022
++#if PACKETVER >= 20141016
  	clif_openvending_ack(sd);
  #endif
  }
@@ -1760,7 +1854,7 @@ index 75d2dab..45ef9a3 100644
  }
  
  /// Result of organizing a party.
-@@ -9222,57 +9233,56 @@ void clif_specialeffect_single(struct block_list* bl, int type, int fd)
+@@ -9222,57 +9240,56 @@ void clif_specialeffect_single(struct block_list* bl, int type, int fd)
  	WFIFOSET(fd,10);
  }
  
@@ -1783,7 +1877,8 @@ index 75d2dab..45ef9a3 100644
 -	unsigned short msg_len = strlen(msg) + 1;
 -	uint8 buf[256];
 -	color = (color & 0x0000FF) << 16 | (color & 0x00FF00) | (color & 0xFF0000) >> 16; // RGB to BGR
--
++	size_t msg_len = strlen(msg) + 1;
+ 
 -	nullpo_ret(bl);
 -
 -	if( msg_len > sizeof(buf)-12 )
@@ -1799,8 +1894,7 @@ index 75d2dab..45ef9a3 100644
 -	memcpy(WBUFP(buf,12), msg, msg_len);
 -
 -	clif_send(buf, WBUFW(buf,2), bl, AREA_CHAT_WOC);
-+	size_t msg_len = strlen(msg) + 1;
- 
+-
 -	return 0;
 +	WFIFOHEAD(fd,msg_len + 12);
 +	WFIFOW(fd,0) = 0x2C1;
@@ -1855,7 +1949,7 @@ index 75d2dab..45ef9a3 100644
  }
  
  // refresh the client's screen, getting rid of any effects
-@@ -9561,32 +9571,35 @@ void clif_slide(struct block_list *bl, int x, int y)
+@@ -9561,32 +9578,35 @@ void clif_slide(struct block_list *bl, int x, int y)
  	}
  }
  
@@ -1909,7 +2003,7 @@ index 75d2dab..45ef9a3 100644
  }
  
  /*==========================
-@@ -10535,22 +10548,34 @@ void clif_parse_TickSend(int fd, struct map_session_data *sd)
+@@ -10535,22 +10555,34 @@ void clif_parse_TickSend(int fd, struct map_session_data *sd)
  	return;
  }
  
@@ -1949,7 +2043,7 @@ index 75d2dab..45ef9a3 100644
  	}
  	WFIFOSET(fd, packet_len(cmd));
  #endif
-@@ -10572,6 +10597,12 @@ void clif_parse_Hotkey(int fd, struct map_session_data *sd) {
+@@ -10572,6 +10604,12 @@ void clif_parse_Hotkey(int fd, struct map_session_data *sd) {
  #endif
  }
  
@@ -1962,25 +2056,123 @@ index 75d2dab..45ef9a3 100644
  void clif_progressbar(struct map_session_data * sd, unsigned long color, unsigned int second)
  {
  	int fd = sd->fd;
-@@ -15593,7 +15624,7 @@ void clif_quest_send_list(struct map_session_data * sd)
+@@ -15585,40 +15623,87 @@ void clif_parse_EquipTick(int fd, struct map_session_data* sd)
+ /// Questlog System [Kevin] [Inkfish]
+ ///
+ 
+-/// Sends list of all quest states.
+-/// 02b1 <packet len>.W <num>.L { <quest id>.L <active>.B }*num (ZC_ALL_QUEST_LIST)
+-/// 097a <packet len>.W <num>.L { <quest id>.L <active>.B <start time>.L <expire time>.L <mobs>.W }*num (ZC_ALL_QUEST_LIST2)
+-/// 09f8 <packet len>.W <num>.L { <quest id>.L <active>.B <start time>.L <expire time>.L <mobs>.W }*num (ZC_ALL_QUEST_LIST3)
+-void clif_quest_send_list(struct map_session_data * sd)
++/**
++ * Safe check to init packet len & quest num for player.
++ * @param def_len
++ * @param info_len Length of each quest info.
++ * @param avail_quests Avail quests that player has.
++ * @param limit_out Limit for quest num, to make sure the quest num is still in allowed value.
++ * @param len_out Packet length as initial set => def_len + limit_out * info_len.
++ **/
++static void clif_quest_len(int def_len, int info_len, int avail_quests, int *limit_out, int *len_out) {
++	(*limit_out) = (0xFFFF - def_len) / info_len;
++	(*limit_out) = (avail_quests > (*limit_out)) ? (*limit_out) : avail_quests;
++	(*len_out) = ((*limit_out) * info_len) + def_len;
++}
++
++
++/// Sends list of all quest states (ZC_ALL_QUEST_LIST).
++/// 02b1 <packet len>.W <num>.L { <quest id>.L <active>.B }*num
++/// 097a <packet len>.W <num>.L { <quest id>.L <active>.B <remaining time>.L <time>.L <count>.W { <mob_id>.L <killed>.W <total>.W <mob name>.24B }*count }*num (ZC_ALL_QUEST_LIST2)
++/// 09f8 <packet len>.W <num>.L { <quest id>.L <active>.B <remaining time>.L <time>.L <count>.W { <mob_id>.L <killed>.W <total>.W <mob name>.24B }*count }*num (ZC_ALL_QUEST_LIST3)
++void clif_quest_send_list(struct map_session_data *sd)
  {
  	int fd = sd->fd;
  	int i;
 -#if PACKETVER < 20150513
-+#if PACKETVER < 20141022
- 	short packet_num = 0x2b1;
- 	short quest_info = 5;
- #else
-@@ -15611,7 +15642,7 @@ void clif_quest_send_list(struct map_session_data * sd)
- 	{
- 		WFIFOL(fd, i*quest_info+8) = sd->quest_log[i].quest_id;
- 		WFIFOB(fd, i*quest_info+12) = sd->quest_log[i].state;
--#if PACKETVER >= 20150513
+-	short packet_num = 0x2b1;
+-	short quest_info = 5;
+-#else
+-	short packet_num = 0x97a;
+-	short quest_info = 15;
+-#endif
+-	int len = sd->avail_quests*quest_info+8;
++	int offset = 8;
++	int limit = 0;
++
 +#if PACKETVER >= 20141022
- 		WFIFOL(fd, i*quest_info+13) = sd->quest_log[i].time - quest_db[sd->quest_index[i]].time;
- 		WFIFOL(fd, i*quest_info+17) = sd->quest_log[i].time;
- 		WFIFOW(fd, i*quest_info+21) = quest_db[sd->quest_index[i]].num_objectives;
-@@ -16716,18 +16747,33 @@ void clif_buyingstore_trade_failed_buyer(struct map_session_data* sd, short resu
++	clif_quest_len(offset, 15 + ((10 + NAME_LENGTH) * MAX_QUEST_OBJECTIVES), sd->avail_quests, &limit, &i);
++	WFIFOHEAD(fd,i);
++	WFIFOW(fd, 0) = 0x97a;
++	WFIFOL(fd, 4) = limit;
++
++	for (i = 0; i < limit; i++) {
++		WFIFOL(fd, offset) = sd->quest_log[i].quest_id;
++		offset += 4;
++		WFIFOB(fd, offset) = sd->quest_log[i].state;
++		offset++;
++		WFIFOL(fd, offset) = sd->quest_log[i].time - quest_db[sd->quest_index[i]].time;
++		offset += 4;
++		WFIFOL(fd, offset) = sd->quest_log[i].time;
++		offset += 4;
++		WFIFOW(fd, offset) = quest_db[sd->quest_index[i]].num_objectives;
++		offset += 2;
++		
++		if( quest_db[sd->quest_index[i]].num_objectives > 0 ){
++			int j;
++			struct mob_db *mob;
++
++			for( j = 0; j < quest_db[sd->quest_index[i]].num_objectives; j++ ){
++				mob = mob_db(quest_db[sd->quest_index[i]].mob[j]);
++
++				WFIFOL(fd, offset) = quest_db[sd->quest_index[i]].mob[j];
++				offset += 4;
++				WFIFOW(fd, offset) = sd->quest_log[i].count[j];
++				offset += 2;
++				WFIFOW(fd, offset) = quest_db[sd->quest_index[i]].count[j];
++				offset += 2;
++				safestrncpy((char*)WFIFOP(fd, offset), mob->jname, NAME_LENGTH);
++				offset += NAME_LENGTH;
++			}
++		}
++	}
+ 
+-	WFIFOHEAD(fd,len);
+-	WFIFOW(fd, 0) = packet_num;
+-	WFIFOW(fd, 2) = len;
+-	WFIFOL(fd, 4) = sd->avail_quests;
++	WFIFOW(fd, 2) = offset;
++	WFIFOSET(fd, offset);
++#else
++	clif_quest_len(offset, 5, sd->avail_quests, &limit, &i);
++	WFIFOHEAD(fd,i);
++	WFIFOW(fd, 0) = 0x2b1;
++	WFIFOL(fd, 4) = limit;
+ 
+-	for( i = 0; i < sd->avail_quests; i++ )
+-	{
+-		WFIFOL(fd, i*quest_info+8) = sd->quest_log[i].quest_id;
+-		WFIFOB(fd, i*quest_info+12) = sd->quest_log[i].state;
+-#if PACKETVER >= 20150513
+-		WFIFOL(fd, i*quest_info+13) = sd->quest_log[i].time - quest_db[sd->quest_index[i]].time;
+-		WFIFOL(fd, i*quest_info+17) = sd->quest_log[i].time;
+-		WFIFOW(fd, i*quest_info+21) = quest_db[sd->quest_index[i]].num_objectives;
+-#endif
++	for (i = 0; i < limit; i++) {
++		WFIFOL(fd, offset) = sd->quest_log[i].quest_id;
++		offset += 4;
++		WFIFOB(fd, offset) = sd->quest_log[i].state;
++		offset += 1;
+ 	}
+-
+-	WFIFOSET(fd, len);
++	
++	WFIFOW(fd, 2) = offset;
++	WFIFOSET(fd, offset);
++#endif
+ }
+ 
+ /// Sends list of all quest missions (ZC_ALL_QUEST_MISSION).
+@@ -16716,18 +16801,33 @@ void clif_buyingstore_trade_failed_buyer(struct map_session_data* sd, short resu
  }
  
  
@@ -2022,7 +2214,7 @@ index 75d2dab..45ef9a3 100644
  }
  
  
-@@ -17020,6 +17066,264 @@ void clif_parse_debug(int fd,struct map_session_data *sd)
+@@ -17020,6 +17120,264 @@ void clif_parse_debug(int fd,struct map_session_data *sd)
  	ShowDump(RFIFOP(fd,0), packet_len);
  }
  
@@ -2287,7 +2479,7 @@ index 75d2dab..45ef9a3 100644
  /*==========================================
   * Main client packet processing function
   *------------------------------------------*/
-@@ -17447,12 +17751,16 @@ static int packetdb_readdb(void)
+@@ -17447,12 +17805,16 @@ static int packetdb_readdb(void)
  	//#0x09C0
  	    0, 10,  0,  0,  0,  0,  0,  0,  0,  0, 23, 17,  0,  0,102,  0,
  	    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -1, -1, -1,  0,  7,
@@ -2309,7 +2501,7 @@ index 75d2dab..45ef9a3 100644
  	    0,  0,  0,  0,  0,  0,  0,  0,  3,  0,  0,  0,  0,  0,  0,  0,
  	//#0x0A40
  	    0,  0,  0,  0,  0,  0, 14,  3,  2,  0,  0,  0,  0,  0,  0,  0,
-@@ -17668,6 +17976,14 @@ static int packetdb_readdb(void)
+@@ -17668,6 +18030,14 @@ static int packetdb_readdb(void)
  		{clif_parse_SearchStoreInfoListItemClick,"searchstoreinfolistitemclick"},
  		//{ clif_parse_MoveItem , "moveitem" },
  		{clif_parse_ranking,"ranking"},
@@ -2325,7 +2517,7 @@ index 75d2dab..45ef9a3 100644
  	};
  
 diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
-index 678ac20..50875a8 100644
+index 678ac20..bae6a44 100644
 --- a/rewrite/src/map/clif.h
 +++ b/rewrite/src/map/clif.h
 @@ -27,9 +27,17 @@ struct battleground_data;
@@ -2420,6 +2612,15 @@ index 678ac20..50875a8 100644
  
  void clif_get_weapon_view(struct map_session_data* sd, unsigned short *rhand, unsigned short *lhand);
  
+@@ -667,7 +702,7 @@ void clif_feel_hate_reset(struct map_session_data *sd);
+ 
+ // [blackhole89]
+ int clif_spawnhomun(struct homun_data *hd);
+-int clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag);
++void clif_hominfo(struct map_session_data *sd, struct homun_data *hd, int flag);
+ int clif_homskillinfoblock(struct map_session_data *sd);
+ void clif_homskillup(struct map_session_data *sd, int skill_num) ;	//[orn]
+ int clif_hom_food(struct map_session_data *sd,int foodid,int fail);	//[orn]
 @@ -761,7 +796,7 @@ void clif_buyingstore_disappear_entry(struct map_session_data* sd);
  void clif_buyingstore_disappear_entry_single(struct map_session_data* sd, struct map_session_data* pl_sd);
  void clif_buyingstore_itemlist(struct map_session_data* sd, struct map_session_data* pl_sd);
