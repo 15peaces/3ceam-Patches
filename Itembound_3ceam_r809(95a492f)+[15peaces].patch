@@ -24,13 +24,13 @@
  rewrite/src/map/party.c                            |   8 +-
  rewrite/src/map/pc.c                               |  43 ++++++-
  rewrite/src/map/pc.h                               |   4 +
- rewrite/src/map/script.c                           |  98 +++++++++++++--
+ rewrite/src/map/script.c                           |  99 +++++++++++++--
  rewrite/src/map/script.h                           |   1 +
  rewrite/src/map/storage.c                          |  13 +-
  rewrite/src/map/storage.h                          |   1 +
  rewrite/src/map/trade.c                            |   6 +
  rewrite/src/map/vending.c                          |   1 +
- 32 files changed, 534 insertions(+), 88 deletions(-)
+ 32 files changed, 535 insertions(+), 88 deletions(-)
 
 diff --git a/rewrite/conf/atcommand_athena.conf b/rewrite/conf/atcommand_athena.conf
 index 9e2d867..f4e84d1 100644
@@ -1255,7 +1255,7 @@ index 4f555fb..8026519 100644
  void pc_paycash(struct map_session_data *sd, int price, int points);
  void pc_getcash(struct map_session_data *sd, int cash, int points);
 diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
-index 48ea068..b7ae3bd 100644
+index 48ea068..6a7ba28 100644
 --- a/rewrite/src/map/script.c
 +++ b/rewrite/src/map/script.c
 @@ -102,6 +102,9 @@
@@ -1368,11 +1368,19 @@ index 48ea068..b7ae3bd 100644
 +		item_tmp.id			=0,item_tmp.nameid=sd->status.inventory[i].nameid;
 +		item_tmp.equip		=0,item_tmp.identify=1,item_tmp.refine=sd->status.inventory[i].refine;
 +		item_tmp.attribute	=sd->status.inventory[i].attribute,item_tmp.expire_time=sd->status.inventory[i].expire_time;
-+		item_tmp.bound		= sd->status.inventory[i].bound;
++		item_tmp.bound		=0;
  			for (j = 0; j < MAX_SLOTS; j++)
  				item_tmp.card[j]=0;
  
-@@ -10520,9 +10556,10 @@ BUILDIN_FUNC(failedremovecards)
+@@ -10432,6 +10468,7 @@ BUILDIN_FUNC(successremovecards)
+ 		item_tmp.id=0,item_tmp.nameid=sd->status.inventory[i].nameid;
+ 		item_tmp.equip=0,item_tmp.identify=1,item_tmp.refine=sd->status.inventory[i].refine;
+ 		item_tmp.attribute=sd->status.inventory[i].attribute,item_tmp.expire_time=sd->status.inventory[i].expire_time;
++		item_tmp.bound= sd->status.inventory[i].bound;
+ 		for (j = 0; j < sd->inventory_data[i]->slot; j++)
+ 			item_tmp.card[j]=0;
+ 		for (j = sd->inventory_data[i]->slot; j < MAX_SLOTS; j++)
+@@ -10520,9 +10557,10 @@ BUILDIN_FUNC(failedremovecards)
  		if(typefail == 1){	// カードのみ損失（武具を返す）
  			int flag;
  			struct item item_tmp;
@@ -1386,7 +1394,7 @@ index 48ea068..b7ae3bd 100644
  
  			//Logs items, got from (N)PC scripts [Lupus]
  			if(log_config.enable_logs&0x40)
-@@ -11172,6 +11209,7 @@ BUILDIN_FUNC(getinventorylist)
+@@ -11172,6 +11210,7 @@ BUILDIN_FUNC(getinventorylist)
  				pc_setreg(sd,reference_uid(add_str(card_var), j),sd->status.inventory[i].card[k]);
  			}
  			pc_setreg(sd,reference_uid(add_str("@inventorylist_expire"), j),sd->status.inventory[i].expire_time);
@@ -1394,7 +1402,7 @@ index 48ea068..b7ae3bd 100644
  			j++;
  		}
  	}
-@@ -15074,6 +15112,39 @@ BUILDIN_FUNC(opendressroom)
+@@ -15074,6 +15113,39 @@ BUILDIN_FUNC(opendressroom)
  	return 0;
  }
  
@@ -1434,7 +1442,7 @@ index 48ea068..b7ae3bd 100644
  // declarations that were supposed to be exported from npc_chat.c
  #ifdef PCRE_SUPPORT
  BUILDIN_FUNC(defpattern);
-@@ -15490,5 +15561,10 @@ struct script_function buildin_func[] = {
+@@ -15490,5 +15562,10 @@ struct script_function buildin_func[] = {
  	// 3CeAM
  	BUILDIN_DEF(opendressroom,"?"),
  
