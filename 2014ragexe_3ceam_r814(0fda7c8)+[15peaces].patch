@@ -2517,7 +2517,7 @@ index 75d2dab..d769d63 100644
  	};
  
 diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
-index 678ac20..bae6a44 100644
+index 678ac20..0351401 100644
 --- a/rewrite/src/map/clif.h
 +++ b/rewrite/src/map/clif.h
 @@ -27,9 +27,17 @@ struct battleground_data;
@@ -2535,7 +2535,7 @@ index 678ac20..bae6a44 100644
  // packet DB
 -#define MAX_PACKET_DB		0xf00
 -#define MAX_PACKET_VER		34
-+#define MAX_PACKET_DB		0xAFF
++#define MAX_PACKET_DB		0xB00
 +#define MAX_PACKET_VER		36
  #define	MAX_PACKET_POS		20
  
