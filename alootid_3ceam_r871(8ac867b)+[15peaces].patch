@@ -1,0 +1,160 @@
+ rewrite/src/map/atcommand.c | 71 +++++++++++++++++++++++++++++++++++++++------
+ rewrite/src/map/mob.c       | 13 ++++++++-
+ rewrite/src/map/pc.h        |  6 +++-
+ 3 files changed, 79 insertions(+), 11 deletions(-)
+
+diff --git a/rewrite/src/map/atcommand.c b/rewrite/src/map/atcommand.c
+index 8f14f1f..d2fff24 100644
+--- a/rewrite/src/map/atcommand.c
++++ b/rewrite/src/map/atcommand.c
+@@ -6747,22 +6747,66 @@ ACMD_FUNC(autoloot)
+ /*==========================================
+  * @alootid
+  *------------------------------------------*/
++
++/*==========================================
++ * @autolootitem [modified version by Rad]
++ * [3ceam version by 15peaces]
++ * modified to enable players autoloot 5 
++ * different items.
++ *------------------------------------------*/
+ ACMD_FUNC(autolootitem)
+ {
+ 	struct item_data *item_data = NULL;
++	int i, slot=0;
++	char item_name[100];
++	
++	memset(item_name, '\0', sizeof(item_name));
+ 
+-	if (!message || !*message) {
+-		if (sd->state.autolootid) {
+-			sd->state.autolootid = 0;
++	if (!message || !*message || (
++		sscanf(message, "\"%99[^\"]\" %d", item_name, &slot) < 1 &&
++		sscanf(message, "%99s %d", item_name, &slot) < 1
++	)) {
++		if (sd->state.autolootactive) {
++			sd->state.autolootactive = 0;
+ 			clif_displaymessage(fd, "Autolootitem has been turned OFF.");
+ 		} else
+-			clif_displaymessage(fd, "Please, enter item name or it's ID (usage: @alootid <item_name_or_ID>).");
++			clif_displaymessage(fd, "Please, enter Item name or its ID (usage: @alootid <item_name_or_ID> [<slot>]).");
++			clif_displaymessage(fd, "...to see autoloot list, @alootid list");
++		return -1;
++	}
++
++	if(strcmp(item_name,"list")==0){
++		clif_displaymessage(fd, "Autoloot items:");
++		
++		for(i=0; i < MAX_ALOOTID; i++){
++			if(sd->state.autolootid[i] <= 500)
++				sprintf(atcmd_output, "Slot %d: %s",i+1,">>> Free autoloot slot <<<");
++			else{
++				item_data = itemdb_search(sd->state.autolootid[i]);
++
++				sprintf(atcmd_output, "Slot %d: '%s'",i+1,item_data->name);
++			}
++
++			clif_displaymessage(fd, atcmd_output);
++		}
++		return 0;
++	}
++
++	else if ((item_data = itemdb_searchname(item_name)) == NULL &&
++	(item_data = itemdb_exists(atoi(item_name))) == NULL){
++		clif_displaymessage(fd, msg_txt(19)); // Invalid item ID or name.
+ 
+ 		return -1;
+ 	}
+ 
+-	if ((item_data = itemdb_exists(atoi(message))) == NULL)
+-		item_data = itemdb_searchname(message);
++	if(slot<1 || slot>MAX_ALOOTID) slot = 1; // check
++		slot = slot - 1;
++
++	if (slot < 0 || slot >MAX_ALOOTID){ //counter check
++		sprintf(atcmd_output, "Slot # can only be 1~%d",MAX_ALOOTID);
++		clif_displaymessage(fd, atcmd_output);
++		return -1;
++	}
+ 
+ 	if (!item_data) {
+ 		// No items founds in the DB with Id or Name
+@@ -6770,10 +6814,19 @@ ACMD_FUNC(autolootitem)
+ 		return -1;
+ 	}
+ 
+-	sd->state.autolootid = item_data->nameid; // Autoloot Activated
++	for(i=0; i < MAX_ALOOTID; i++){ //to prevent duplicate entry
++		if(item_data->nameid == sd->state.autolootid[i]){
++			sprintf(atcmd_output, "'%s' is already auto-looted in Slot %d.",item_data->name, i+1);
++			clif_displaymessage(fd, atcmd_output);
++			return -1;
++		}
++	}
++
++	sd->state.autolootid[slot] = item_data->nameid; // Autoloot Activated
++	sd->state.autolootactive = 1;
+ 
+-	sprintf(atcmd_output, "Autolooting item: '%s'/'%s' (%d)",
+-		item_data->name, item_data->jname, item_data->nameid);
++	sprintf(atcmd_output, "Autolooting Item: '%s'/'%s' {%d} , Stored in slot %d",
++	item_data->name, item_data->jname, item_data->nameid,slot+1);
+ 	clif_displaymessage(fd, atcmd_output);
+ 
+ 	return 0;
+diff --git a/rewrite/src/map/mob.c b/rewrite/src/map/mob.c
+index 7619232..5acb0df 100644
+--- a/rewrite/src/map/mob.c
++++ b/rewrite/src/map/mob.c
+@@ -1727,6 +1727,17 @@ static int mob_delay_item_drop(int tid, unsigned int tick, int id, intptr data)
+ 	return 0;
+ }
+ 
++int mob_processdrop(struct map_session_data * sd, int nameid)
++{
++	int i;
++	for(i=0; i < MAX_ALOOTID; i++)
++	{
++		if(nameid == sd->state.autolootid[i])
++		return 1;
++	}
++	return 0;
++}
++
+ /*==========================================
+  * Sets the item_drop into the item_drop_list.
+  * Also performs logging and autoloot if enabled.
+@@ -1750,7 +1761,7 @@ static void mob_item_drop(struct mob_data *md, struct item_drop_list *dlist, str
+ 	if( sd == NULL ) sd = map_charid2sd(dlist->third_charid);
+ 
+ 	if( sd
+-		&& (drop_rate <= sd->state.autoloot || ditem->item_data.nameid == sd->state.autolootid)
++		&& (drop_rate <= sd->state.autoloot || mob_processdrop( sd, ditem->item_data.nameid ))
+ 		&& (battle_config.idle_no_autoloot == 0 || DIFF_TICK(last_tick, sd->idletime) < battle_config.idle_no_autoloot)
+ 		&& (battle_config.homunculus_autoloot?1:!flag)
+ #ifdef AUTOLOOT_DISTANCE
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 3c68564..3be1be6 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -25,6 +25,9 @@
+ #define MAX_RUNE 60
+ #define MAX_SPELLBOOK 7
+ 
++// set maximum alootid slots here
++#define MAX_ALOOTID 5
++
+ struct weapon_data {
+ 	int atkmods[3];
+ 	// all the variables except atkmods get zero'ed in each call of status_calc_pc
+@@ -141,7 +144,8 @@ struct map_session_data {
+ 		unsigned lesseffect : 1;
+ 		unsigned vending : 1;
+ 		unsigned short autoloot;
+-		unsigned short autolootid; // [Zephyrus]
++		unsigned short autolootid[MAX_ALOOTID];  // [Zephyrus]
++		unsigned short autolootactive;
+ 		unsigned noks : 3; // [Zeph Kill Steal Protection]
+ 		bool changemap;
+ 		short pmap; // Previous map on Map Change
