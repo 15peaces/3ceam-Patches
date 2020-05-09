@@ -1,0 +1,2152 @@
+ rewrite/conf/msg_athena.conf                 |   4 +-
+ rewrite/sql-files/3ceam_favorite_tab.sql     |  38 ++++++
+ rewrite/sql-files/3ceam_favorite_tab_log.sql |   8 ++
+ rewrite/sql-files/logs.sql                   |  12 +-
+ rewrite/sql-files/main.sql                   |  61 +++++-----
+ rewrite/src/char_sql/char.c                  | 169 ++++++++++++++++++++++++---
+ rewrite/src/char_sql/int_auction.c           |   6 +-
+ rewrite/src/char_sql/int_mail.c              |   4 +-
+ rewrite/src/common/mmo.h                     |   7 +-
+ rewrite/src/map/atcommand.c                  |  15 ++-
+ rewrite/src/map/buyingstore.c                |   2 +-
+ rewrite/src/map/clif.c                       |  74 ++++++++++--
+ rewrite/src/map/clif.h                       |  12 +-
+ rewrite/src/map/itemdb.c                     |  65 ++++++-----
+ rewrite/src/map/itemdb.h                     |  18 +--
+ rewrite/src/map/log.c                        |  14 +--
+ rewrite/src/map/log.h                        |   4 +-
+ rewrite/src/map/mob.c                        |   2 +-
+ rewrite/src/map/mob.h                        |  10 +-
+ rewrite/src/map/npc.c                        |  24 ++--
+ rewrite/src/map/npc.h                        |   5 +-
+ rewrite/src/map/pc.c                         |  34 +++---
+ rewrite/src/map/pc.h                         |  18 +--
+ rewrite/src/map/pet.c                        |  12 +-
+ rewrite/src/map/pet.h                        |   2 +-
+ rewrite/src/map/script.c                     |  59 ++++++----
+ rewrite/src/map/searchstore.c                |   2 +-
+ rewrite/src/map/searchstore.h                |   6 +-
+ rewrite/src/map/skill.c                      |  10 +-
+ rewrite/src/map/skill.h                      |  12 +-
+ rewrite/src/map/storage.c                    |  10 +-
+ 31 files changed, 496 insertions(+), 223 deletions(-)
+
+diff --git a/rewrite/conf/msg_athena.conf b/rewrite/conf/msg_athena.conf
+index a15848b..50ab79d 100644
+--- a/rewrite/conf/msg_athena.conf
++++ b/rewrite/conf/msg_athena.conf
+@@ -182,7 +182,7 @@
+ 166: No item has been refined.
+ 167: 1 item has been refined.
+ 168: %d items have been refined.
+-169: The item (%d: '%s') is not equipable.
++169: The item (%hu: '%s') is not equipable.
+ 170: The item is not equipable.
+ 171: %d - void
+ //172: You replace previous memo position %d - %s (%d,%d).
+@@ -444,7 +444,7 @@
+ 537: Character '%s' (account: %d) is trying to use a bot (it tries to detect a fake mob).
+ // Trade Spoof Messages
+ 538: Hack on trade: character '%s' (account: %d) try to trade more items that he has.
+-539: This player has %d of a kind of item (id: %d), and tried to trade %d of them.
++539: This player has %d of a kind of item (id: %hu), and tried to trade %d of them.
+ 540: This player has been definitivly blocked.
+ // Rare Items Drop/Steal announce
+ 541: '%s' got %s's %s (chance: %0.02f%%)
+diff --git a/rewrite/sql-files/3ceam_favorite_tab.sql b/rewrite/sql-files/3ceam_favorite_tab.sql
+new file mode 100644
+index 0000000..d42fe34
+--- /dev/null
++++ b/rewrite/sql-files/3ceam_favorite_tab.sql
+@@ -0,0 +1,38 @@
++UPDATE `auction` SET `card0` = 256 WHERE `card0` = -256;
++UPDATE `cart_inventory` SET `card0` = 256 WHERE `card0` = -256;
++UPDATE `guild_storage` SET `card0` = 256 WHERE `card0` = -256;
++UPDATE `inventory` SET `card0` = 256 WHERE `card0` = -256;
++UPDATE `mail` SET `card0` = 256 WHERE `card0` = -256;
++UPDATE `storage` SET `card0` = 256 WHERE `card0` = -256;
++
++ALTER TABLE `auction` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `auction` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `auction` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `auction` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `auction` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `cart_inventory` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `cart_inventory` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `cart_inventory` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `cart_inventory` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `cart_inventory` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `guild_storage` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `guild_storage` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `guild_storage` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `guild_storage` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `guild_storage` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `inventory`  ADD COLUMN `favorite` TINYINT UNSIGNED NOT NULL DEFAULT '0' AFTER `expire_time`;
++ALTER TABLE `mail` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `mail` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `mail` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `mail` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `mail` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `storage` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `storage` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `storage` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `storage` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `storage` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
+diff --git a/rewrite/sql-files/3ceam_favorite_tab_log.sql b/rewrite/sql-files/3ceam_favorite_tab_log.sql
+new file mode 100644
+index 0000000..7dceaa3
+--- /dev/null
++++ b/rewrite/sql-files/3ceam_favorite_tab_log.sql
+@@ -0,0 +1,8 @@
++UPDATE `picklog` SET `card0` = 256 WHERE `card0` = -256;
++
++ALTER TABLE `picklog` MODIFY `nameid` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `picklog` MODIFY `card0` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `picklog` MODIFY `card1` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `picklog` MODIFY `card2` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `picklog` MODIFY `card3` smallint(5) unsigned NOT NULL default '0';
++ALTER TABLE `mvplog` MODIFY `prize` smallint(5) unsigned NOT NULL default '0'; 
+diff --git a/rewrite/sql-files/logs.sql b/rewrite/sql-files/logs.sql
+index 6a69e3e..5c58ffb 100644
+--- a/rewrite/sql-files/logs.sql
++++ b/rewrite/sql-files/logs.sql
+@@ -10,13 +10,13 @@ CREATE TABLE `picklog` (
+   `time` datetime NOT NULL default '0000-00-00 00:00:00',
+   `char_id` int(11) NOT NULL default '0',
+   `type` enum('M','P','L','T','V','S','N','C','A','R','G','E','B') NOT NULL default 'P',
+-  `nameid` int(11) NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` int(11) NOT NULL default '1',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   `map` varchar(11) NOT NULL default '',
+   PRIMARY KEY  (`id`),
+   INDEX (`type`)
+@@ -58,7 +58,7 @@ CREATE TABLE `mvplog` (
+   `mvp_date` datetime NOT NULL default '0000-00-00 00:00:00',
+   `kill_char_id` int(11) NOT NULL default '0',
+   `monster_id` smallint(6) NOT NULL default '0',
+-  `prize` int(11) NOT NULL default '0',
++  `prize` smallint(5) unsigned NOT NULL default '0',
+   `mvpexp` mediumint(9) NOT NULL default '0',
+   `map` varchar(11) NOT NULL default '',
+   PRIMARY KEY  (`mvp_id`)
+diff --git a/rewrite/sql-files/main.sql b/rewrite/sql-files/main.sql
+index 46b72f9..a3fd87a 100644
+--- a/rewrite/sql-files/main.sql
++++ b/rewrite/sql-files/main.sql
+@@ -12,15 +12,15 @@ CREATE TABLE IF NOT EXISTS `auction` (
+   `buynow` int(11) unsigned NOT NULL default '0',
+   `hours` smallint(6) NOT NULL default '0',
+   `timestamp` int(11) unsigned NOT NULL default '0',
+-  `nameid` int(11) unsigned NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `item_name` varchar(50) NOT NULL default '',
+   `type` smallint(6) NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) unsigned NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`auction_id`)
+ ) ENGINE=MyISAM;
+ 
+@@ -31,16 +31,16 @@ CREATE TABLE IF NOT EXISTS `auction` (
+ CREATE TABLE IF NOT EXISTS `cart_inventory` (
+   `id` int(11) NOT NULL auto_increment,
+   `char_id` int(11) NOT NULL default '0',
+-  `nameid` int(11) NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` int(11) NOT NULL default '0',
+   `equip` int(11) unsigned NOT NULL default '0',
+   `identify` smallint(6) NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` ismallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`),
+   KEY `char_id` (`char_id`)
+@@ -329,16 +329,16 @@ CREATE TABLE IF NOT EXISTS `guild_skill` (
+ CREATE TABLE IF NOT EXISTS `guild_storage` (
+   `id` int(10) unsigned NOT NULL auto_increment,
+   `guild_id` int(11) unsigned NOT NULL default '0',
+-  `nameid` int(11) unsigned NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` int(11) unsigned NOT NULL default '0',
+   `equip` int(11) unsigned NOT NULL default '0',
+   `identify` smallint(6) unsigned NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) unsigned NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`),
+   KEY `guild_id` (`guild_id`)
+@@ -390,17 +390,18 @@ CREATE TABLE IF NOT EXISTS `interlog` (
+ CREATE TABLE IF NOT EXISTS `inventory` (
+   `id` int(11) unsigned NOT NULL auto_increment,
+   `char_id` int(11) unsigned NOT NULL default '0',
+-  `nameid` int(11) unsigned NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` int(11) unsigned NOT NULL default '0',
+   `equip` int(11) unsigned NOT NULL default '0',
+   `identify` smallint(6) NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) unsigned NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
++  `favorite` TINYINT unsigned NOT NULL DEFAULT '0',
+   PRIMARY KEY  (`id`),
+   KEY `char_id` (`char_id`)
+ ) ENGINE=MyISAM;
+@@ -488,15 +489,15 @@ CREATE TABLE IF NOT EXISTS `mail` (
+   `time` int(11) unsigned NOT NULL default '0',
+   `status` tinyint(2) NOT NULL default '0',
+   `zeny` int(11) unsigned NOT NULL default '0',
+-  `nameid` int(11) unsigned NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` int(11) unsigned NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) unsigned NOT NULL default '0',
+   `identify` smallint(6) NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`)
+ ) ENGINE=MyISAM;
+ 
+@@ -660,16 +661,16 @@ CREATE TABLE IF NOT EXISTS `sstatus` (
+ CREATE TABLE IF NOT EXISTS `storage` (
+   `id` int(11) unsigned NOT NULL auto_increment,
+   `account_id` int(11) unsigned NOT NULL default '0',
+-  `nameid` int(11) unsigned NOT NULL default '0',
++  `nameid` smallint(5) unsigned NOT NULL default '0',
+   `amount` smallint(11) unsigned NOT NULL default '0',
+   `equip` int(11) unsigned NOT NULL default '0',
+   `identify` smallint(6) unsigned NOT NULL default '0',
+   `refine` tinyint(3) unsigned NOT NULL default '0',
+   `attribute` tinyint(4) unsigned NOT NULL default '0',
+-  `card0` int(11) NOT NULL default '0',
+-  `card1` int(11) NOT NULL default '0',
+-  `card2` int(11) NOT NULL default '0',
+-  `card3` int(11) NOT NULL default '0',
++  `card0` smallint(5) unsigned NOT NULL default '0',
++  `card1` smallint(5) unsigned NOT NULL default '0',
++  `card2` smallint(5) unsigned NOT NULL default '0',
++  `card3` smallint(5) unsigned NOT NULL default '0',
+   `expire_time` int(11) unsigned NOT NULL default '0',
+   PRIMARY KEY  (`id`),
+   KEY `account_id` (`account_id`)
+diff --git a/rewrite/src/char_sql/char.c b/rewrite/src/char_sql/char.c
+index 6497d5f..d0e1a02 100644
+--- a/rewrite/src/char_sql/char.c
++++ b/rewrite/src/char_sql/char.c
+@@ -407,6 +407,8 @@ static void* create_charstatus(DBKey key, va_list args)
+ }
+ #endif //TXT_SQL_CONVERT
+ 
++int inventory_to_sql(const struct item items[], int max, int id);
++
+ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ {
+ 	int i = 0;
+@@ -430,7 +432,7 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ 	//map inventory data
+ 	if( memcmp(p->inventory, cp->inventory, sizeof(p->inventory)) )
+ 	{
+-		memitemdata_to_sql(p->inventory, MAX_INVENTORY, p->char_id, TABLE_INVENTORY);
++		inventory_to_sql(p->inventory, MAX_INVENTORY, p->char_id);
+ 		strcat(save_status, " inventory");
+ 	}
+ 
+@@ -681,6 +683,134 @@ int mmo_char_tosql(int char_id, struct mmo_charstatus* p)
+ 	return 0;
+ }
+ 
++/* pretty much a copy of memitemdata_to_sql except it handles inventory_db exclusively,
++* - this is required because inventory db is the only one with the 'favorite' column. */
++int inventory_to_sql(const struct item items[], int max, int id) {
++	StringBuf buf;
++	SqlStmt* stmt;
++	int i;
++	int j;
++	struct item item; // temp storage variable
++	bool* flag; // bit array for inventory matching
++	bool found;
++
++	// The following code compares inventory with current database values
++	// and performs modification/deletion/insertion only on relevant rows.
++	// This approach is more complicated than a trivial delete&insert, but
++	// it significantly reduces cpu load on the database server.
++
++	StringBuf_Init(&buf);
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `favorite`");
++	for (j = 0; j < MAX_SLOTS; ++j)
++		StringBuf_Printf(&buf, ", `card%d`", j);
++	StringBuf_Printf(&buf, " FROM `%s` WHERE `char_id`='%d'", inventory_db, id);
++
++	stmt = SqlStmt_Malloc(sql_handle);
++	if (SQL_ERROR == SqlStmt_PrepareStr(stmt, StringBuf_Value(&buf))
++		|| SQL_ERROR == SqlStmt_Execute(stmt))
++	{
++		SqlStmt_ShowDebug(stmt);
++		SqlStmt_Free(stmt);
++		StringBuf_Destroy(&buf);
++		return 1;
++	}
++
++	SqlStmt_BindColumn(stmt, 0, SQLDT_INT, &item.id, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 1, SQLDT_USHORT, &item.nameid, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 2, SQLDT_SHORT, &item.amount, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 3, SQLDT_USHORT, &item.equip, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR, &item.identify, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR, &item.refine, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR, &item.attribute, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 7, SQLDT_UINT, &item.expire_time, 0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 8, SQLDT_CHAR, &item.favorite, 0, NULL, NULL);
++	for (j = 0; j < MAX_SLOTS; ++j)
++		SqlStmt_BindColumn(stmt, 9 + j, SQLDT_USHORT, &item.card[j], 0, NULL, NULL);
++
++	// bit array indicating which inventory items have already been matched
++	flag = (bool*)aCalloc(max, sizeof(bool));
++
++	while (SQL_SUCCESS == SqlStmt_NextRow(stmt)) {
++		found = false;
++		// search for the presence of the item in the char's inventory
++		for (i = 0; i < max; ++i) {
++			// skip empty and already matched entries
++			if (items[i].nameid == 0 || flag[i])
++				continue;
++
++			if (items[i].nameid == item.nameid
++				&&  items[i].card[0] == item.card[0]
++				&& items[i].card[2] == item.card[2]
++				&& items[i].card[3] == item.card[3]
++				) {	//They are the same item.
++				ARR_FIND(0, MAX_SLOTS, j, items[i].card[j] != item.card[j]);
++				if (j == MAX_SLOTS &&
++					items[i].amount == item.amount &&
++					items[i].equip == item.equip &&
++					items[i].identify == item.identify &&
++					items[i].refine == item.refine &&
++					items[i].attribute == item.attribute &&
++					items[i].expire_time == item.expire_time &&
++					items[i].favorite == item.favorite)
++					;	//Do nothing.
++				else {
++					// update all fields.
++					StringBuf_Clear(&buf);
++					StringBuf_Printf(&buf, "UPDATE `%s` SET `amount`='%d', `equip`='%d', `identify`='%d', `refine`='%d',`attribute`='%d', `expire_time`='%u', `favorite`='%d'",
++						inventory_db, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time, items[i].favorite);
++					for (j = 0; j < MAX_SLOTS; ++j)
++						StringBuf_Printf(&buf, ", `card%d`=%d", j, items[i].card[j]);
++					StringBuf_Printf(&buf, " WHERE `id`='%d' LIMIT 1", item.id);
++
++					if (SQL_ERROR == Sql_QueryStr(sql_handle, StringBuf_Value(&buf)))
++						Sql_ShowDebug(sql_handle);
++				}
++
++				found = flag[i] = true; //Item dealt with,
++				break; //skip to next item in the db.
++			}
++		}
++		if (!found) {// Item not present in inventory, remove it.
++			if (SQL_ERROR == Sql_Query(sql_handle, "DELETE from `%s` where `id`='%d' LIMIT 1", inventory_db, item.id))
++				Sql_ShowDebug(sql_handle);
++		}
++	}
++	SqlStmt_Free(stmt);
++
++	StringBuf_Clear(&buf);
++	StringBuf_Printf(&buf, "INSERT INTO `%s` (`char_id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `favorite`", inventory_db);
++	for (j = 0; j < MAX_SLOTS; ++j)
++		StringBuf_Printf(&buf, ", `card%d`", j);
++	StringBuf_AppendStr(&buf, ") VALUES ");
++
++	found = false;
++	// insert non-matched items into the db as new items
++	for (i = 0; i < max; ++i) {
++		// skip empty and already matched entries
++		if (items[i].nameid == 0 || flag[i])
++			continue;
++
++		if (found)
++			StringBuf_AppendStr(&buf, ",");
++		else
++			found = true;
++
++		StringBuf_Printf(&buf, "('%d', '%hu', '%d', '%d', '%d', '%d', '%d', '%u', '%d'",
++			id, items[i].nameid, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time, items[i].favorite);
++		for (j = 0; j < MAX_SLOTS; ++j)
++			StringBuf_Printf(&buf, ", '%hu'", items[i].card[j]);
++		StringBuf_AppendStr(&buf, ")");
++	}
++
++	if (found && SQL_ERROR == Sql_QueryStr(sql_handle, StringBuf_Value(&buf)))
++		Sql_ShowDebug(sql_handle);
++
++	StringBuf_Destroy(&buf);
++	aFree(flag);
++
++	return 0;
++}
++
+ /// Saves an array of 'item' entries into the specified table.
+ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswitch)
+ {
+@@ -727,7 +857,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	}
+ 
+ 	SqlStmt_BindColumn(stmt, 0, SQLDT_INT,       &item.id,          0, NULL, NULL);
+-	SqlStmt_BindColumn(stmt, 1, SQLDT_INT,       &item.nameid,      0, NULL, NULL);
++	SqlStmt_BindColumn(stmt, 1, SQLDT_USHORT,    &item.nameid,      0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 2, SQLDT_SHORT,     &item.amount,      0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 3, SQLDT_UINT,      &item.equip,       0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,      &item.identify,    0, NULL, NULL);
+@@ -735,7 +865,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 	SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &item.attribute,   0, NULL, NULL);
+ 	SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &item.expire_time, 0, NULL, NULL);
+ 	for( j = 0; j < MAX_SLOTS; ++j )
+-		SqlStmt_BindColumn(stmt, 8+j, SQLDT_INT, &item.card[j], 0, NULL, NULL);
++		SqlStmt_BindColumn(stmt, 8+j, SQLDT_USHORT, &item.card[j], 0, NULL, NULL);
+ 
+ 	// bit array indicating which inventory items have already been matched
+ 	flag = (bool*) aCallocA(max, sizeof(bool));
+@@ -771,7 +901,7 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 					StringBuf_Printf(&buf, "UPDATE `%s` SET `amount`='%d', `equip`='%d', `identify`='%d', `refine`='%d',`attribute`='%d', `expire_time`='%u'",
+ 						tablename, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time);
+ 					for( j = 0; j < MAX_SLOTS; ++j )
+-						StringBuf_Printf(&buf, ", `card%d`=%d", j, items[i].card[j]);
++						StringBuf_Printf(&buf, ", `card%d`=%hu", j, items[i].card[j]);
+ 					StringBuf_Printf(&buf, " WHERE `id`='%d' LIMIT 1", item.id);
+ 					
+ 					if( SQL_ERROR == Sql_QueryStr(sql_handle, StringBuf_Value(&buf)) )
+@@ -809,10 +939,10 @@ int memitemdata_to_sql(const struct item items[], int max, int id, int tableswit
+ 		else
+ 			found = true;
+ 
+-		StringBuf_Printf(&buf, "('%d', '%d', '%d', '%d', '%d', '%d', '%d', '%u'",
++		StringBuf_Printf(&buf, "('%d', '%hu', '%d', '%d', '%d', '%d', '%d', '%u'",
+ 			id, items[i].nameid, items[i].amount, items[i].equip, items[i].identify, items[i].refine, items[i].attribute, items[i].expire_time);
+ 		for( j = 0; j < MAX_SLOTS; ++j )
+-			StringBuf_Printf(&buf, ", '%d'", items[i].card[j]);
++			StringBuf_Printf(&buf, ", '%hu'", items[i].card[j]);
+ 		StringBuf_AppendStr(&buf, ")");
+ 	}
+ 
+@@ -1169,7 +1299,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	//read inventory
+ 	//`inventory` (`id`,`char_id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `card0`, `card1`, `card2`, `card3`)
+ 	StringBuf_Init(&buf);
+-	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`");
++	StringBuf_AppendStr(&buf, "SELECT `id`, `nameid`, `amount`, `equip`, `identify`, `refine`, `attribute`, `expire_time`, `favorite`");
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+ 		StringBuf_Printf(&buf, ", `card%d`", i);
+ 	StringBuf_Printf(&buf, " FROM `%s` WHERE `char_id`=? LIMIT %d", inventory_db, MAX_INVENTORY);
+@@ -1178,16 +1308,17 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindParam(stmt, 0, SQLDT_INT, &char_id, 0)
+ 	||	SQL_ERROR == SqlStmt_Execute(stmt)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 0, SQLDT_INT,       &tmp_item.id, 0, NULL, NULL)
+-	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 1, SQLDT_INT,       &tmp_item.nameid, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 1, SQLDT_USHORT,    &tmp_item.nameid, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 2, SQLDT_SHORT,     &tmp_item.amount, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 3, SQLDT_UINT,      &tmp_item.equip, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,      &tmp_item.identify, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 5, SQLDT_CHAR,      &tmp_item.refine, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 6, SQLDT_CHAR,      &tmp_item.attribute, 0, NULL, NULL)
+-	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &tmp_item.expire_time, 0, NULL, NULL) )
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,      &tmp_item.expire_time, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 8, SQLDT_CHAR,      &tmp_item.favorite, 0, NULL, NULL) )
+ 		SqlStmt_ShowDebug(stmt);
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+-		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 8+i, SQLDT_INT, &tmp_item.card[i], 0, NULL, NULL) )
++		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 9+i, SQLDT_USHORT, &tmp_item.card[i], 0, NULL, NULL) )
+ 			SqlStmt_ShowDebug(stmt);
+ 
+ 	for( i = 0; i < MAX_INVENTORY && SQL_SUCCESS == SqlStmt_NextRow(stmt); ++i )
+@@ -1207,7 +1338,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindParam(stmt, 0, SQLDT_INT, &char_id, 0)
+ 	||	SQL_ERROR == SqlStmt_Execute(stmt)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 0, SQLDT_INT,         &tmp_item.id, 0, NULL, NULL)
+-	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 1, SQLDT_INT,         &tmp_item.nameid, 0, NULL, NULL)
++	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 1, SQLDT_USHORT,      &tmp_item.nameid, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 2, SQLDT_SHORT,       &tmp_item.amount, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 3, SQLDT_UINT,        &tmp_item.equip, 0, NULL, NULL)
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 4, SQLDT_CHAR,        &tmp_item.identify, 0, NULL, NULL)
+@@ -1216,7 +1347,7 @@ int mmo_char_fromsql(int char_id, struct mmo_charstatus* p, bool load_everything
+ 	||	SQL_ERROR == SqlStmt_BindColumn(stmt, 7, SQLDT_UINT,        &tmp_item.expire_time, 0, NULL, NULL) )
+ 		SqlStmt_ShowDebug(stmt);
+ 	for( i = 0; i < MAX_SLOTS; ++i )
+-		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 8+i, SQLDT_INT, &tmp_item.card[i], 0, NULL, NULL) )
++		if( SQL_ERROR == SqlStmt_BindColumn(stmt, 8+i, SQLDT_USHORT, &tmp_item.card[i], 0, NULL, NULL) )
+ 			SqlStmt_ShowDebug(stmt);
+ 
+ 	for( i = 0; i < MAX_CART && SQL_SUCCESS == SqlStmt_NextRow(stmt); ++i )
+@@ -1554,20 +1685,20 @@ int make_new_char_sql(struct char_session_data* sd, char* name_, int str, int ag
+ 	//Give the char the default items
+ #if PACKETVER >= 20151029
+ 	if (starting_weapon > 0) {
+-		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%d', '%d', '%d')", inventory_db, char_id, starting_weapon, 1, 1) )
++		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%hu', '%d', '%d')", inventory_db, char_id, starting_weapon, 1, 1) )
+ 			Sql_ShowDebug(sql_handle);
+ 	}
+ 	if (starting_armor > 0) {
+-		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%d', '%d', '%d')", inventory_db, char_id, starting_armor, 1, 1) )
++		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%hu', '%d', '%d')", inventory_db, char_id, starting_armor, 1, 1) )
+ 			Sql_ShowDebug(sql_handle);
+ 	}
+ #else
+ 	if (start_weapon > 0) { //add Start Weapon (Knife?)
+-		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%d', '%d', '%d')", inventory_db, char_id, start_weapon, 1, 1) )
++		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%hu', '%d', '%d')", inventory_db, char_id, start_weapon, 1, 1) )
+ 			Sql_ShowDebug(sql_handle);
+ 	}
+ 	if (start_armor > 0) { //Add default armor (cotton shirt?)
+-		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%d', '%d', '%d')", inventory_db, char_id, start_armor, 1, 1) )
++		if( SQL_ERROR == Sql_Query(sql_handle, "INSERT INTO `%s` (`char_id`,`nameid`, `amount`, `identify`) VALUES ('%d', '%hu', '%d', '%d')", inventory_db, char_id, start_armor, 1, 1) )
+ 			Sql_ShowDebug(sql_handle);
+ 	}
+ #endif
+@@ -1585,7 +1716,7 @@ int divorce_char_sql(int partner_id1, int partner_id2)
+ 
+ 	if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `partner_id`='0' WHERE `char_id`='%d' OR `char_id`='%d'", char_db, partner_id1, partner_id2) )
+ 		Sql_ShowDebug(sql_handle);
+-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE (`nameid`='%d' OR `nameid`='%d') AND (`char_id`='%d' OR `char_id`='%d')", inventory_db, WEDDING_RING_M, WEDDING_RING_F, partner_id1, partner_id2) )
++	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE (`nameid`='%hu' OR `nameid`='%hu') AND (`char_id`='%d' OR `char_id`='%d')", inventory_db, WEDDING_RING_M, WEDDING_RING_F, partner_id1, partner_id2) )
+ 		Sql_ShowDebug(sql_handle);
+ 
+ 	WBUFW(buf,0) = 0x2b12;
+@@ -1674,9 +1805,9 @@ int delete_char_sql(int char_id)
+ 		Sql_ShowDebug(sql_handle);
+ 
+ 	//Delete all pets that are stored in eggs (inventory + cart)
+-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = -256", pet_db, pet_db, inventory_db, inventory_db, char_id) )
++	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = 256", pet_db, pet_db, inventory_db, inventory_db, char_id) )
+ 		Sql_ShowDebug(sql_handle);
+-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = -256", pet_db, pet_db, cart_db, cart_db, char_id) )
++	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = 256", pet_db, pet_db, cart_db, cart_db, char_id) )
+ 		Sql_ShowDebug(sql_handle);
+ 
+ 	/* remove homunculus */ 
+diff --git a/rewrite/src/char_sql/int_auction.c b/rewrite/src/char_sql/int_auction.c
+index bba6932..50d169c 100644
+--- a/rewrite/src/char_sql/int_auction.c
++++ b/rewrite/src/char_sql/int_auction.c
+@@ -51,10 +51,10 @@ void auction_save(struct auction_data *auction)
+ 		return;
+ 
+ 	StringBuf_Init(&buf);
+-	StringBuf_Printf(&buf, "UPDATE `%s` SET `seller_id` = '%d', `seller_name` = ?, `buyer_id` = '%d', `buyer_name` = ?, `price` = '%d', `buynow` = '%d', `hours` = '%d', `timestamp` = '%lu', `nameid` = '%d', `item_name` = ?, `type` = '%d', `refine` = '%d', `attribute` = '%d'",
++	StringBuf_Printf(&buf, "UPDATE `%s` SET `seller_id` = '%d', `seller_name` = ?, `buyer_id` = '%d', `buyer_name` = ?, `price` = '%d', `buynow` = '%d', `hours` = '%d', `timestamp` = '%lu', `nameid` = '%hu', `item_name` = ?, `type` = '%d', `refine` = '%d', `attribute` = '%d'",
+ 		auction_db, auction->seller_id, auction->buyer_id, auction->price, auction->buynow, auction->hours, (unsigned long)auction->timestamp, auction->item.nameid, auction->type, auction->item.refine, auction->item.attribute);
+ 	for( j = 0; j < MAX_SLOTS; j++ )
+-		StringBuf_Printf(&buf, ", `card%d` = '%d'", j, auction->item.card[j]);
++		StringBuf_Printf(&buf, ", `card%d` = '%hu'", j, auction->item.card[j]);
+ 	StringBuf_Printf(&buf, " WHERE `auction_id` = '%d'", auction->auction_id);
+ 
+ 	stmt = SqlStmt_Malloc(sql_handle);
+@@ -89,7 +89,7 @@ unsigned int auction_create(struct auction_data *auction)
+ 	StringBuf_Printf(&buf, ") VALUES ('%d',?,'%d',?,'%d','%d','%d','%lu','%d',?,'%d','%d','%d'",
+ 		auction->seller_id, auction->buyer_id, auction->price, auction->buynow, auction->hours, (unsigned long)auction->timestamp, auction->item.nameid, auction->type, auction->item.refine, auction->item.attribute);
+ 	for( j = 0; j < MAX_SLOTS; j++ )
+-		StringBuf_Printf(&buf, ",'%d'", auction->item.card[j]);
++		StringBuf_Printf(&buf, ",'%hu'", auction->item.card[j]);
+ 	StringBuf_AppendStr(&buf, ")");
+ 	
+ 	stmt = SqlStmt_Malloc(sql_handle);
+diff --git a/rewrite/src/char_sql/int_mail.c b/rewrite/src/char_sql/int_mail.c
+index b19b732..4c567a4 100644
+--- a/rewrite/src/char_sql/int_mail.c
++++ b/rewrite/src/char_sql/int_mail.c
+@@ -109,10 +109,10 @@ int mail_savemessage(struct mail_message* msg)
+ 	StringBuf_Printf(&buf, "INSERT INTO `%s` (`send_name`, `send_id`, `dest_name`, `dest_id`, `title`, `message`, `time`, `status`, `zeny`, `amount`, `nameid`, `refine`, `attribute`, `identify`", mail_db);
+ 	for (j = 0; j < MAX_SLOTS; j++)
+ 		StringBuf_Printf(&buf, ", `card%d`", j);
+-	StringBuf_Printf(&buf, ") VALUES (?, '%d', ?, '%d', ?, ?, '%lu', '%d', '%d', '%d', '%d', '%d', '%d', '%d'",
++	StringBuf_Printf(&buf, ") VALUES (?, '%d', ?, '%d', ?, ?, '%lu', '%d', '%d', '%d', '%hu', '%d', '%d', '%d'",
+ 		msg->send_id, msg->dest_id, (unsigned long)msg->timestamp, msg->status, msg->zeny, msg->item.amount, msg->item.nameid, msg->item.refine, msg->item.attribute, msg->item.identify);
+ 	for (j = 0; j < MAX_SLOTS; j++)
+-		StringBuf_Printf(&buf, ", '%d'", msg->item.card[j]);
++		StringBuf_Printf(&buf, ", '%hu'", msg->item.card[j]);
+ 	StringBuf_AppendStr(&buf, ")");
+ 
+ 	// prepare and execute query
+diff --git a/rewrite/src/common/mmo.h b/rewrite/src/common/mmo.h
+index cc518e7..a66b0f8 100644
+--- a/rewrite/src/common/mmo.h
++++ b/rewrite/src/common/mmo.h
+@@ -48,7 +48,7 @@
+ 
+ #ifndef PACKETVER
+ 	//#define PACKETVER	20081126
+-	#define PACKETVER 20180620
++	#define PACKETVER 20161228
+ #endif
+ // backward compatible PACKETVER 8 and 9
+ #if PACKETVER == 8
+@@ -223,14 +223,15 @@ struct quest {
+ 
+ struct item {
+ 	int id;
+-	int nameid;
++	unsigned short nameid;
+ 	short amount;
+ 	unsigned int equip; // location(s) where item is equipped (using enum equip_pos for bitmasking)
+ 	char identify;
+ 	char refine;
+ 	char attribute;
+-	int card[MAX_SLOTS];
++	unsigned short card[MAX_SLOTS];
+ 	unsigned int expire_time;
++	unsigned char favorite;
+ };
+ 
+ struct point {
+diff --git a/rewrite/src/map/atcommand.c b/rewrite/src/map/atcommand.c
+index fbea68c..f6ee5bf 100644
+--- a/rewrite/src/map/atcommand.c
++++ b/rewrite/src/map/atcommand.c
+@@ -1702,7 +1702,8 @@ ACMD_FUNC(heal)
+ ACMD_FUNC(item)
+ {
+ 	char item_name[100];
+-	int number = 0, item_id, flag;
++	int number = 0, flag;
++	unsigned short item_id;
+ 	struct item item_tmp;
+ 	struct item_data *item_data;
+ 	int get_count, i;
+@@ -1762,7 +1763,8 @@ ACMD_FUNC(item2)
+ 	struct item item_tmp;
+ 	struct item_data *item_data;
+ 	char item_name[100];
+-	int item_id, number = 0;
++	int number = 0;
++	unsigned short item_id;
+ 	int identify = 0, refine = 0, attr = 0;
+ 	int c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+ 	int flag;
+@@ -3011,7 +3013,8 @@ ACMD_FUNC(refine)
+ ACMD_FUNC(produce)
+ {
+ 	char item_name[100];
+-	int item_id, attribute = 0, star = 0;
++	int attribute = 0, star = 0;
++	unsigned short item_id;
+ 	int flag = 0;
+ 	struct item_data *item_data;
+ 	struct item tmp_item;
+@@ -6459,7 +6462,8 @@ ACMD_FUNC(skilltree)
+ // Hand a ring with partners name on it to this char
+ void getring (struct map_session_data* sd)
+ {
+-	int flag, item_id;
++	int flag;
++	unsigned short item_id;
+ 	struct item item_tmp;
+ 	item_id = (sd->status.sex) ? WEDDING_RING_M : WEDDING_RING_F;
+ 
+@@ -9379,7 +9383,8 @@ ACMD_FUNC(stats)
+ ACMD_FUNC(delitem)
+ {
+ 	char item_name[100];
+-	int nameid, amount = 0, total, idx;
++	int amount = 0, total, idx;
++	unsigned short nameid;
+ 	struct item_data* id;
+ 
+ 	nullpo_retr(-1, sd);
+diff --git a/rewrite/src/map/buyingstore.c b/rewrite/src/map/buyingstore.c
+index 7e8f2ef..030476f 100644
+--- a/rewrite/src/map/buyingstore.c
++++ b/rewrite/src/map/buyingstore.c
+@@ -34,7 +34,7 @@ enum e_buyingstore_failure
+ 
+ 
+ static unsigned int buyingstore_nextid = 0;
+-static const int buyingstore_blankslots[MAX_SLOTS] = { 0 };  // used when checking whether or not an item's card slots are blank
++static const unsigned short buyingstore_blankslots[MAX_SLOTS] = { 0 };  // used when checking whether or not an item's card slots are blank
+ 
+ 
+ /// Returns unique buying store id
+diff --git a/rewrite/src/map/clif.c b/rewrite/src/map/clif.c
+index 067acd2..d1c2d83 100644
+--- a/rewrite/src/map/clif.c
++++ b/rewrite/src/map/clif.c
+@@ -2383,7 +2383,7 @@ int clif_additem(struct map_session_data *sd, int n, int amount, int fail)
+ 		clif_add_random_options(WFIFOP(fd,31), &sd->status.inventory[n]);
+ #endif
+ #if PACKETVER >= 20161228
+-		WFIFOB(fd,56)=0;
++		WFIFOB(fd,56)=sd->status.inventory[n].favorite;
+ 		// Send look data only if the item is a armor type with view data.
+ 		// Headgears and garments are the only ones like this at this time.
+ 		if ( itemtype(sd->inventory_data[n]->type) == 5 && sd->inventory_data[n]->equip&EQP_VISIBLE )
+@@ -2476,6 +2476,7 @@ void clif_item_sub(unsigned char *buf, int n, struct item *i, struct item_data *
+ 
+ }
+ 
++void clif_favorite_item(struct map_session_data* sd, unsigned short index);
+ //Unified inventory function which sends all of the inventory (requires two packets, one for equipable items and one for stackable ones. [Skotlex]
+ void clif_inventorylist(struct map_session_data *sd)
+ {
+@@ -2567,6 +2568,16 @@ void clif_inventorylist(struct map_session_data *sd)
+ 		clif_send(bufe, WBUFW(bufe,2), &sd->bl, SELF);
+ 	}
+ 
++#if PACKETVER >= 20111122 && PACKETVER < 20120925
++	for (i = 0; i < MAX_INVENTORY; i++) {
++		if (sd->status.inventory[i].nameid <= 0 || sd->inventory_data[i] == NULL)
++			continue;
++
++		if (sd->status.inventory[i].favorite)
++			clif_favorite_item(sd, i);
++}
++#endif
++
+ 	if( buf ) aFree(buf);
+ 	if( bufe ) aFree(bufe);
+ #endif
+@@ -2605,13 +2616,13 @@ void clif_item_flag_v5(unsigned char *buf, int n, struct item *i, struct item_da
+ 		WBUFB(buf,n)=
+ 			((i->identify?1:0)<<0)|// IsIdentified
+ 			((i->attribute?1:0)<<1)|// IsDamaged
+-			(0<<2);// bPlaceETCTab
++			((i->favorite?1:0)<<2);// bPlaceETCTab
+ 	}
+ 	else
+ 	{// Regular Items (Stackable)
+ 		WBUFB(buf,n)=
+ 			((i->identify?1:0)<<0)|// IsIdentified
+-			(0<<1);// bPlaceETCTab
++			((i->favorite?1:0)<<1);// bPlaceETCTab
+ 	}
+ }
+ 
+@@ -6753,7 +6764,7 @@ void clif_refine(int fd, int fail, int index, int val)
+ /// result=1: "weapon upgrated: %s" MsgStringTable[912] in rgb(0,205,205)
+ /// result=2: "cannot upgrade %s until you level up the upgrade weapon skill" MsgStringTable[913] in rgb(255,200,200)
+ /// result=3: "you lack the item %s to upgrade the weapon" MsgStringTable[914] in rgb(255,200,200)
+-void clif_upgrademessage(int fd, int result, int item_id)
++void clif_upgrademessage(int fd, int result, unsigned short item_id)
+ {
+ 	WFIFOHEAD(fd,packet_len(0x223));
+ 	WFIFOW(fd,0)=0x223;
+@@ -6950,7 +6961,7 @@ int clif_item_repair_list(struct map_session_data *sd,struct map_session_data *d
+ {
+ 	int i,c;
+ 	int fd;
+-	int nameid;
++	unsigned short nameid;
+ 
+ 	nullpo_ret(sd);
+ 	nullpo_ret(dstsd);
+@@ -7925,7 +7936,7 @@ int clif_movetoattack(struct map_session_data *sd,struct block_list *bl)
+ ///     6 = Success (Genetic)
+ ///     7 = Failure (Genetic)
+  *------------------------------------------*/
+-int clif_produceeffect(struct map_session_data* sd,int flag,int nameid)
++int clif_produceeffect(struct map_session_data* sd,int flag,unsigned short nameid)
+ {
+ 	int view,fd;
+ 
+@@ -8372,7 +8383,7 @@ int clif_mvp_effect(struct map_session_data *sd)
+ /*==========================================
+  * MVPアイテム所得
+  *------------------------------------------*/
+-int clif_mvp_item(struct map_session_data *sd,int nameid)
++int clif_mvp_item(struct map_session_data *sd,unsigned short nameid)
+ {
+ 	int view,fd;
+ 
+@@ -12564,7 +12575,7 @@ void clif_parse_SkillSelectMenu(int fd, struct map_session_data *sd)
+ void clif_parse_Cooking(int fd,struct map_session_data *sd)
+ {
+ 	int type = RFIFOW(fd,2);
+-	int nameid = RFIFOW(fd,4);
++	unsigned short nameid = RFIFOW(fd,4);
+ 
+ 	if( type == 6 && sd->menuskill_id != GN_MIX_COOKING && sd->menuskill_id != GN_S_PHARMACY )
+ 		return;
+@@ -16528,7 +16539,7 @@ void clif_elemental_info(struct map_session_data *sd)
+ /*------------------------------------------
+  * Rental System Messages
+  *------------------------------------------*/
+-void clif_rental_time(int fd, int nameid, int seconds)
++void clif_rental_time(int fd, unsigned short nameid, int seconds)
+ { // '<ItemName>' item will disappear in <seconds/60> minutes.
+ 	WFIFOHEAD(fd,8);
+ 	WFIFOW(fd,0) = 0x0298;
+@@ -16537,7 +16548,7 @@ void clif_rental_time(int fd, int nameid, int seconds)
+ 	WFIFOSET(fd,8);
+ }
+ 
+-void clif_rental_expired(int fd, int nameid)
++void clif_rental_expired(int fd, unsigned short nameid)
+ { // '<ItemName>' item has been deleted from the Inventory
+ 	WFIFOHEAD(fd,6);
+ 	WFIFOW(fd,0) = 0x0299;
+@@ -17612,6 +17623,47 @@ void clif_parse_debug(int fd,struct map_session_data *sd)
+ 	ShowDump(RFIFOP(fd,0), packet_len);
+ }
+ 
++/// Move Item from or to Personal Tab (CZ_WHATSOEVER) [FE]
++/// 0907 <index>.W
++///
++/// R 0908 <index>.w <type>.b
++/// type:
++/// 	0 = move item to personal tab
++/// 	1 = move item to normal tab
++void clif_parse_MoveItem(int fd, struct map_session_data *sd) {
++#if PACKETVER >= 20111122
++	int index;
++
++	if (pc_isdead(sd)) {
++		return;
++	}
++	index = RFIFOW(fd, 2) - 2;
++	if (index < 0 || index >= MAX_INVENTORY)
++		return;
++	if (sd->status.inventory[index].favorite && RFIFOB(fd, 4) == 1)
++		sd->status.inventory[index].favorite = 0;
++	else if (RFIFOB(fd, 4) == 0)
++		sd->status.inventory[index].favorite = 1;
++	else
++		return;/* nothing to do. */
++
++	clif_favorite_item(sd, index);
++#endif
++}
++
++
++/// Items that are in favorite tab of inventory (ZC_ITEM_FAVORITE).
++/// 0900 <index>.W <favorite>.B
++void clif_favorite_item(struct map_session_data* sd, unsigned short index) {
++	int fd = sd->fd;
++
++	WFIFOHEAD(fd, packet_len(0x908));
++	WFIFOW(fd, 0) = 0x908;
++	WFIFOW(fd, 2) = index + 2;
++	WFIFOB(fd, 4) = (sd->status.inventory[index].favorite == 1) ? 0 : 1;
++	WFIFOSET(fd, packet_len(0x908));
++}
++
+ /*==========================================
+  * Main client packet processing function
+  *------------------------------------------*/
+@@ -18272,7 +18324,7 @@ static int packetdb_readdb(void)
+ 		{clif_parse_SearchStoreInfoNextPage,"searchstoreinfonextpage"},
+ 		{clif_parse_CloseSearchStoreInfo,"closesearchstoreinfo"},
+ 		{clif_parse_SearchStoreInfoListItemClick,"searchstoreinfolistitemclick"},
+-		//{ clif_parse_MoveItem , "moveitem" },
++		{clif_parse_MoveItem , "moveitem"},
+ 		{clif_parse_ranking,"ranking"},
+ 		{clif_parse_stylingshoppurchase,"stylingshoppurchase"},
+ 		{clif_parse_changedress,"changedress"},
+diff --git a/rewrite/src/map/clif.h b/rewrite/src/map/clif.h
+index 1263e0c..c71c9e9 100644
+--- a/rewrite/src/map/clif.h
++++ b/rewrite/src/map/clif.h
+@@ -461,7 +461,7 @@ int clif_outsight(struct block_list *,va_list);	// map_forallinmovearea callback
+ 
+ int clif_class_change(struct block_list *bl,int class_,int type);
+ #define clif_mob_class_change(md, class_) clif_class_change(&md->bl, class_, 1)
+-int clif_mob_equip(struct mob_data *md,int nameid); // [Valaris]
++int clif_mob_equip(struct mob_data *md,unsigned short nameid); // [Valaris]
+ 
+ int clif_skillupdateinfo(struct map_session_data *sd,int skillid,int type,int range);
+ int clif_skillinfoblock(struct map_session_data *sd);
+@@ -484,7 +484,7 @@ void clif_skill_teleportmessage(struct map_session_data* sd, int type);
+ int clif_skill_produce_mix_list(struct map_session_data *sd, int skill_num, int trigger);
+ void clif_cooking_list(struct map_session_data *sd, int trigger, int skill_id, int qty, int list_type);
+ 
+-int clif_produceeffect(struct map_session_data* sd,int flag,int nameid);
++int clif_produceeffect(struct map_session_data* sd,int flag,unsigned short nameid);
+ 
+ void clif_skill_setunit(struct skill_unit *unit);
+ void clif_skill_delunit(struct skill_unit *unit);
+@@ -528,7 +528,7 @@ int clif_item_refine_list(struct map_session_data *sd);
+ int clif_item_skill(struct map_session_data *sd,int skillid,int skilllv);
+ 
+ int clif_mvp_effect(struct map_session_data *sd);
+-int clif_mvp_item(struct map_session_data *sd,int nameid);
++int clif_mvp_item(struct map_session_data *sd,unsigned short nameid);
+ int clif_mvp_exp(struct map_session_data *sd, unsigned int exp);
+ void clif_changed_dir(struct block_list *bl, enum send_target target);
+ 
+@@ -622,7 +622,7 @@ void clif_map_property(struct map_session_data* sd, enum map_property property);
+ int clif_pvpset(struct map_session_data *sd, int pvprank, int pvpnum,int type);
+ void clif_map_property_mapall(int map, enum map_property property);
+ void clif_refine(int fd, int fail, int index, int val);
+-void clif_upgrademessage(int fd, int result, int item_id);
++void clif_upgrademessage(int fd, int result, unsigned short item_id);
+ 
+ //petsystem
+ int clif_catch_process(struct map_session_data *sd);
+@@ -734,8 +734,8 @@ void clif_mercenary_message(struct map_session_data* sd, int message);
+ void clif_mercenary_updatestatus(struct map_session_data *sd, int type);
+ 
+ // RENTAL SYSTEM
+-void clif_rental_time(int fd, int nameid, int seconds);
+-void clif_rental_expired(int fd, int nameid);
++void clif_rental_time(int fd, unsigned short nameid, int seconds);
++void clif_rental_expired(int fd, unsigned short nameid);
+ 
+ // BOOK READING
+ void clif_readbook(int fd, int book_id, int page);
+diff --git a/rewrite/src/map/itemdb.c b/rewrite/src/map/itemdb.c
+index 644fc06..a514db4 100644
+--- a/rewrite/src/map/itemdb.c
++++ b/rewrite/src/map/itemdb.c
+@@ -22,7 +22,7 @@
+ 
+ 
+ static struct item_data* itemdb_array[MAX_ITEMDB];
+-static DBMap*            itemdb_other;// int nameid -> struct item_data*
++static DBMap*            itemdb_other;// unsigned short nameid -> struct item_data*
+ 
+ static struct item_group itemgroup_db[MAX_ITEMGROUP];
+ 
+@@ -169,7 +169,7 @@ int itemdb_group_bonus(struct map_session_data* sd, int itemid)
+ 
+ /// Searches for the item_data.
+ /// Returns the item_data or NULL if it does not exist.
+-struct item_data* itemdb_exists(int nameid)
++struct item_data* itemdb_exists(unsigned short nameid)
+ {
+ 	struct item_data* item;
+ 
+@@ -399,7 +399,7 @@ static void create_dummy_data(void)
+ 	dummy_item.view_id=UNKNOWN_ITEM_ID;
+ }
+ 
+-static struct item_data* create_item_data(int nameid)
++static struct item_data* create_item_data(unsigned short nameid)
+ {
+ 	struct item_data *id;
+ 	CREATE(id, struct item_data, 1);
+@@ -412,7 +412,7 @@ static struct item_data* create_item_data(int nameid)
+ /*==========================================
+  * Loads (and creates if not found) an item from the db.
+  *------------------------------------------*/
+-struct item_data* itemdb_load(int nameid)
++struct item_data* itemdb_load(unsigned short nameid)
+ {
+ 	struct item_data *id;
+ 
+@@ -436,7 +436,7 @@ struct item_data* itemdb_load(int nameid)
+ /*==========================================
+  * Loads an item from the db. If not found, it will return the dummy item.
+  *------------------------------------------*/
+-struct item_data* itemdb_search(int nameid)
++struct item_data* itemdb_search(unsigned short nameid)
+ {
+ 	struct item_data* id;
+ 	if( nameid >= 0 && nameid < ARRAYLENGTH(itemdb_array) )
+@@ -446,7 +446,7 @@ struct item_data* itemdb_search(int nameid)
+ 
+ 	if( id == NULL )
+ 	{
+-		ShowWarning("itemdb_search: Item ID %d does not exists in the item_db. Using dummy data.\n", nameid);
++		ShowWarning("itemdb_search: Item ID %hu does not exists in the item_db. Using dummy data.\n", nameid);
+ 		id = &dummy_item;
+ 		dummy_item.nameid = nameid;
+ 	}
+@@ -456,7 +456,7 @@ struct item_data* itemdb_search(int nameid)
+ /*==========================================
+  * Returns if given item is a player-equippable piece.
+  *------------------------------------------*/
+-int itemdb_isequip(int nameid)
++int itemdb_isequip(unsigned short nameid)
+ {
+ 	int type=itemdb_type(nameid);
+ 	switch (type) {
+@@ -488,7 +488,7 @@ int itemdb_isequip2(struct item_data *data)
+ /*==========================================
+  * Returns if given item's type is stackable.
+  *------------------------------------------*/
+-int itemdb_isstackable(int nameid)
++int itemdb_isstackable(unsigned short nameid)
+ {
+   int type=itemdb_type(nameid);
+   switch(type) {
+@@ -580,7 +580,7 @@ int itemdb_isrestricted(struct item* item, int gmlv, int gmlv2, int (*func)(stru
+ /*==========================================
+  *	Specifies if item-type should drop unidentified.
+  *------------------------------------------*/
+-int itemdb_isidentified(int nameid)
++int itemdb_isidentified(unsigned short nameid)
+ {
+ 	int type=itemdb_type(nameid);
+ 	switch (type) {
+@@ -601,14 +601,14 @@ int itemdb_isidentified(int nameid)
+  *------------------------------------------*/
+ static bool itemdb_read_itemavail(char* str[], int columns, int current)
+ {// <nameid>,<sprite>
+-	int nameid, sprite;
++	unsigned short nameid, sprite;
+ 	struct item_data *id;
+ 
+ 	nameid = atoi(str[0]);
+ 
+ 	if( ( id = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		ShowWarning("itemdb_read_itemavail: Invalid item id %d.\n", nameid);
++		ShowWarning("itemdb_read_itemavail: Invalid item id %hu.\n", nameid);
+ 		return false;
+ 	}
+ 
+@@ -635,7 +635,8 @@ static void itemdb_read_itemgroup_sub(const char* filename)
+ 	FILE *fp;
+ 	char line[1024];
+ 	int ln=0;
+-	int groupid,j,k,nameid;
++	int groupid,j,k;
++	unsigned short nameid;
+ 	char *str[3],*p;
+ 	char w1[1024], w2[1024];
+ 	
+@@ -707,14 +708,14 @@ static void itemdb_read_itemgroup(void)
+  *------------------------------------------*/
+ static bool itemdb_read_noequip(char* str[], int columns, int current)
+ {// <nameid>,<mode>
+-	int nameid;
++	unsigned short nameid;
+ 	struct item_data *id;
+ 
+ 	nameid = atoi(str[0]);
+ 
+ 	if( ( id = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		ShowWarning("itemdb_read_noequip: Invalid item id %d.\n", nameid);
++		ShowWarning("itemdb_read_noequip: Invalid item id %hu.\n", nameid);
+ 		return false;
+ 	}
+ 
+@@ -728,14 +729,15 @@ static bool itemdb_read_noequip(char* str[], int columns, int current)
+  *------------------------------------------*/
+ static bool itemdb_read_itemtrade(char* str[], int columns, int current)
+ {// <nameid>,<mask>,<gm level>
+-	int nameid, flag, gmlv;
++	int flag, gmlv;
++	unsigned short nameid;
+ 	struct item_data *id;
+ 
+ 	nameid = atoi(str[0]);
+ 
+ 	if( ( id = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		//ShowWarning("itemdb_read_itemtrade: Invalid item id %d.\n", nameid);
++		//ShowWarning("itemdb_read_itemtrade: Invalid item id %hu.\n", nameid);
+ 		//return false;
+ 		// FIXME: item_trade.txt contains items, which are commented in item database.
+ 		return true;
+@@ -746,13 +748,13 @@ static bool itemdb_read_itemtrade(char* str[], int columns, int current)
+ 
+ 	if( flag < 0 || flag >= 128 )
+ 	{//Check range
+-		ShowWarning("itemdb_read_itemtrade: Invalid trading mask %d for item id %d.\n", flag, nameid);
++		ShowWarning("itemdb_read_itemtrade: Invalid trading mask %d for item id %hu.\n", flag, nameid);
+ 		return false;
+ 	}
+ 
+ 	if( gmlv < 1 )
+ 	{
+-		ShowWarning("itemdb_read_itemtrade: Invalid override GM level %d for item id %d.\n", gmlv, nameid);
++		ShowWarning("itemdb_read_itemtrade: Invalid override GM level %d for item id %hu.\n", gmlv, nameid);
+ 		return false;
+ 	}
+ 
+@@ -767,14 +769,15 @@ static bool itemdb_read_itemtrade(char* str[], int columns, int current)
+  *------------------------------------------*/
+ static bool itemdb_read_itemdelay(char* str[], int columns, int current)
+ {// <nameid>,<delay>
+-	int nameid, delay;
++	int delay;
++	unsigned short nameid;
+ 	struct item_data *id;
+ 
+ 	nameid = atoi(str[0]);
+ 
+ 	if( ( id = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		ShowWarning("itemdb_read_itemdelay: Invalid item id %d.\n", nameid);
++		ShowWarning("itemdb_read_itemdelay: Invalid item id %hu.\n", nameid);
+ 		return false;
+ 	}
+ 
+@@ -782,7 +785,7 @@ static bool itemdb_read_itemdelay(char* str[], int columns, int current)
+ 
+ 	if( delay < 0 )
+ 	{
+-		ShowWarning("itemdb_read_itemdelay: Invalid delay %d for item id %d.\n", id->delay, nameid);
++		ShowWarning("itemdb_read_itemdelay: Invalid delay %d for item id %hu.\n", id->delay, nameid);
+ 		return false;
+ 	}
+ 
+@@ -795,20 +798,20 @@ static bool itemdb_read_itemdelay(char* str[], int columns, int current)
+ /// Reads items allowed to be sold in buying stores
+ static bool itemdb_read_buyingstore(char* fields[], int columns, int current)
+ {// <nameid>
+-	int nameid;
++	unsigned short nameid;
+ 	struct item_data* id;
+ 
+ 	nameid = atoi(fields[0]);
+ 
+ 	if( ( id = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		ShowWarning("itemdb_read_buyingstore: Invalid item id %d.\n", nameid);
++		ShowWarning("itemdb_read_buyingstore: Invalid item id %hu.\n", nameid);
+ 		return false;
+ 	}
+ 
+ 	if( !itemdb_isstackable2(id) )
+ 	{
+-		ShowWarning("itemdb_read_buyingstore: Non-stackable item id %d cannot be enabled for buying store.\n", nameid);
++		ShowWarning("itemdb_read_buyingstore: Non-stackable item id %hu cannot be enabled for buying store.\n", nameid);
+ 		return false;
+ 	}
+ 
+@@ -867,13 +870,13 @@ static bool itemdb_parse_dbrow(char** str, const char* source, int line, int scr
+ 		+----+--------------+---------------+------+-----------+------------+--------+--------+---------+-------+-------+------------+-------------+---------------+-----------------+--------------+-------------+------------+------+--------+--------------+----------------+
+ 	*/
+ 	short item_type;
+-	int nameid;
++	unsigned short nameid;
+ 	struct item_data* id;
+ 	
+ 	nameid = atoi(str[0]);
+-	if( nameid <= 0 )
++	if( nameid == 0 )
+ 	{
+-		ShowWarning("itemdb_parse_dbrow: Invalid id %d in line %d of \"%s\", skipping.\n", nameid, line, source);
++		ShowWarning("itemdb_parse_dbrow: Invalid id %hu in line %hu of \"%s\", skipping.\n", nameid, line, source);
+ 		return false;
+ 	}
+ 
+@@ -894,7 +897,7 @@ static bool itemdb_parse_dbrow(char** str, const char* source, int line, int scr
+ 
+ 	if( id->type < 0 || id->type == IT_UNKNOWN || id->type == IT_UNKNOWN2 || ( id->type > IT_DELAYCONSUME && id->type < IT_CASH ) || id->type >= IT_MAX )
+ 	{// catch invalid item types
+-		ShowWarning("itemdb_parse_dbrow: Invalid item type %d for item %d. IT_ETC will be used.\n", id->type, nameid);
++		ShowWarning("itemdb_parse_dbrow: Invalid item type %d for item %hu. IT_ETC will be used.\n", id->type, nameid);
+ 		id->type = IT_ETC;
+ 	}
+ 
+@@ -925,7 +928,7 @@ static bool itemdb_parse_dbrow(char** str, const char* source, int line, int scr
+ 	} else
+ 	*/
+ 	if (id->value_buy/124. < id->value_sell/75.)
+-		ShowWarning("itemdb_parse_dbrow: Buying/Selling [%d/%d] price of item %d (%s) allows Zeny making exploit  through buying/selling at discounted/overcharged prices!\n",
++		ShowWarning("itemdb_parse_dbrow: Buying/Selling [%d/%d] price of item %hu (%s) allows Zeny making exploit  through buying/selling at discounted/overcharged prices!\n",
+ 			id->value_buy, id->value_sell, nameid, id->jname);
+ 
+ 	id->weight = atoi(str[6]);
+@@ -936,7 +939,7 @@ static bool itemdb_parse_dbrow(char** str, const char* source, int line, int scr
+ 
+ 	if (id->slot > MAX_SLOTS)
+ 	{
+-		ShowWarning("itemdb_parse_dbrow: Item %d (%s) specifies %d slots, but the server only supports up to %d. Using %d slots.\n", nameid, id->jname, id->slot, MAX_SLOTS, MAX_SLOTS);
++		ShowWarning("itemdb_parse_dbrow: Item %hu (%s) specifies %d slots, but the server only supports up to %d. Using %d slots.\n", nameid, id->jname, id->slot, MAX_SLOTS, MAX_SLOTS);
+ 		id->slot = MAX_SLOTS;
+ 	}
+ 
+@@ -947,7 +950,7 @@ static bool itemdb_parse_dbrow(char** str, const char* source, int line, int scr
+ 
+ 	if (!id->equip && itemdb_isequip2(id))
+ 	{
+-		ShowWarning("Item %d (%s) is an equipment with no equip-field! Making it an etc item.\n", nameid, id->jname);
++		ShowWarning("Item %hu (%s) is an equipment with no equip-field! Making it an etc item.\n", nameid, id->jname);
+ 		id->type = IT_ETC;
+ 	}
+ 
+diff --git a/rewrite/src/map/itemdb.h b/rewrite/src/map/itemdb.h
+index fb6b75a..9e5453f 100644
+--- a/rewrite/src/map/itemdb.h
++++ b/rewrite/src/map/itemdb.h
+@@ -174,7 +174,7 @@ enum item_itemid {
+ 
+ #define CARD0_FORGE 0x00FF
+ #define CARD0_CREATE 0x00FE
+-#define CARD0_PET ((short)0xFF00)
++#define CARD0_PET 0x0100
+ 
+ //Marks if the card0 given is "special" (non-item id used to mark pets/created items. [Skotlex]
+ #define itemdb_isspecial(i) (i == CARD0_FORGE || i == CARD0_CREATE || i == CARD0_PET)
+@@ -183,7 +183,7 @@ enum item_itemid {
+ #define UNKNOWN_ITEM_ID 512
+ 
+ struct item_data {
+-	int nameid;
++	unsigned short nameid;
+ 	char name[ITEM_NAME_LENGTH],jname[ITEM_NAME_LENGTH];
+ 	//Do not add stuff between value_buy and wlv (see how getiteminfo works)
+ 	int value_buy;
+@@ -227,15 +227,15 @@ struct item_data {
+ };
+ 
+ struct item_group {
+-	int nameid[MAX_RANDITEM];
++	unsigned short nameid[MAX_RANDITEM];
+ 	int qty; //Counts amount of items in the group.
+ };
+ 
+ struct item_data* itemdb_searchname(const char *name);
+ int itemdb_searchname_array(struct item_data** data, int size, const char *str);
+-struct item_data* itemdb_load(int nameid);
+-struct item_data* itemdb_search(int nameid);
+-struct item_data* itemdb_exists(int nameid);
++struct item_data* itemdb_load(unsigned short nameid);
++struct item_data* itemdb_search(unsigned short nameid);
++struct item_data* itemdb_exists(unsigned short nameid);
+ #define itemdb_name(n) itemdb_search(n)->name
+ #define itemdb_jname(n) itemdb_search(n)->jname
+ #define itemdb_type(n) itemdb_search(n)->type
+@@ -280,10 +280,10 @@ int itemdb_isrestricted(struct item* item, int gmlv, int gmlv2, int (*func)(stru
+ #define itemdb_canstore(item, gmlv) itemdb_isrestricted(item, gmlv, 0, itemdb_canstore_sub) 
+ #define itemdb_canguildstore(item, gmlv) itemdb_isrestricted(item , gmlv, 0, itemdb_canguildstore_sub) 
+ 
+-int itemdb_isequip(int);
++int itemdb_isequip(unsigned short);
+ int itemdb_isequip2(struct item_data *);
+-int itemdb_isidentified(int);
+-int itemdb_isstackable(int);
++int itemdb_isidentified(unsigned short);
++int itemdb_isstackable(unsigned short);
+ int itemdb_isstackable2(struct item_data *);
+ 
+ void itemdb_reload(void);
+diff --git a/rewrite/src/map/log.c b/rewrite/src/map/log.c
+index 72cfe46..b84ada5 100644
+--- a/rewrite/src/map/log.c
++++ b/rewrite/src/map/log.c
+@@ -38,7 +38,7 @@ time_t curtime;
+ //12 - Log rare items (if their drop chance <= rare_log )
+ 
+ //check if this item should be logged according the settings
+-int should_log_item(int filter, int nameid, int amount)
++int should_log_item(int filter, unsigned short nameid, int amount)
+ {
+ 	struct item_data *item_data;
+ 	if ((item_data= itemdb_exists(nameid)) == NULL) return 0;
+@@ -96,7 +96,7 @@ int log_branch(struct map_session_data *sd)
+ }
+ 
+ 
+-int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int amount, struct item *itm)
++int log_pick_pc(struct map_session_data *sd, const char *type, unsigned short nameid, int amount, struct item *itm)
+ {
+ 	nullpo_ret(sd);
+ 
+@@ -107,14 +107,14 @@ int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int a
+ 	if( log_config.sql_logs )
+ 	{
+ 		if( itm == NULL ) { //We log common item
+-			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `map`) VALUES (NOW(), '%d', '%s', '%d', '%d', '%s')",
++			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `map`) VALUES (NOW(), '%d', '%s', '%hu', '%d', '%s')",
+ 				log_config.log_pick_db, sd->status.char_id, type, nameid, amount, mapindex_id2name(sd->mapindex)) )
+ 			{
+ 				Sql_ShowDebug(logmysql_handle);
+ 				return 0;
+ 			}
+ 		} else { //We log Extended item
+-			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `refine`, `card0`, `card1`, `card2`, `card3`, `map`) VALUES (NOW(), '%d', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%s')",
++			if (SQL_ERROR == Sql_Query(logmysql_handle, "INSERT DELAYED INTO `%s` (`time`, `char_id`, `type`, `nameid`, `amount`, `refine`, `card0`, `card1`, `card2`, `card3`, `map`) VALUES (NOW(), '%d', '%s', '%hu', '%d', '%d', '%hu', '%hu', '%hu', '%hu', '%s')",
+ 				log_config.log_pick_db, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex)) )
+ 			{
+ 				Sql_ShowDebug(logmysql_handle);
+@@ -133,9 +133,9 @@ int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int a
+ 		strftime(timestring, 254, "%m/%d/%Y %H:%M:%S", localtime(&curtime));
+ 
+ 		if( itm == NULL ) { //We log common item
+-			fprintf(logfp,"%s - %d\t%s\t%d,%d,%s\n", timestring, sd->status.char_id, type, nameid, amount, mapindex_id2name(sd->mapindex));
++			fprintf(logfp,"%s - %d\t%s\t%hu,%d,%s\n", timestring, sd->status.char_id, type, nameid, amount, mapindex_id2name(sd->mapindex));
+ 		} else { //We log Extended item
+-			fprintf(logfp,"%s - %d\t%s\t%d,%d,%d,%d,%d,%d,%d,%s\n", timestring, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex));
++			fprintf(logfp,"%s - %d\t%s\t%hu,%d,%d,%hu,%hu,%hu,%hu,%s\n", timestring, sd->status.char_id, type, itm->nameid, amount, itm->refine, itm->card[0], itm->card[1], itm->card[2], itm->card[3], mapindex_id2name(sd->mapindex));
+ 		}
+ 		fclose(logfp);
+ 	}
+@@ -144,7 +144,7 @@ int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int a
+ }
+ 
+ //Mob picked item
+-int log_pick_mob(struct mob_data *md, const char *type, int nameid, int amount, struct item *itm)
++int log_pick_mob(struct mob_data *md, const char *type, unsigned short nameid, int amount, struct item *itm)
+ {
+ 	char* mapname;
+ 
+diff --git a/rewrite/src/map/log.h b/rewrite/src/map/log.h
+index f882364..fba340e 100644
+--- a/rewrite/src/map/log.h
++++ b/rewrite/src/map/log.h
+@@ -10,8 +10,8 @@ struct mob_data;
+ struct item;
+ 
+ //New logs
+-int log_pick_pc(struct map_session_data *sd, const char *type, int nameid, int amount, struct item *itm);
+-int log_pick_mob(struct mob_data *md, const char *type, int nameid, int amount, struct item *itm);
++int log_pick_pc(struct map_session_data *sd, const char *type, unsigned short nameid, int amount, struct item *itm);
++int log_pick_mob(struct mob_data *md, const char *type, unsigned short nameid, int amount, struct item *itm);
+ int log_zeny(struct map_session_data *sd, char *type, struct map_session_data *src_sd, int amount);
+ 
+ int log_npc(struct map_session_data *sd, const char *message);
+diff --git a/rewrite/src/map/mob.c b/rewrite/src/map/mob.c
+index 1a15eea..c7e7592 100644
+--- a/rewrite/src/map/mob.c
++++ b/rewrite/src/map/mob.c
+@@ -1683,7 +1683,7 @@ static int mob_ai_hard(int tid, unsigned int tick, int id, intptr data)
+ /*==========================================
+  * Initializes the delay drop structure for mob-dropped items.
+  *------------------------------------------*/
+-static struct item_drop* mob_setdropitem(int nameid, int qty)
++static struct item_drop* mob_setdropitem(unsigned short nameid, int qty)
+ {
+ 	struct item_drop *drop = ers_alloc(item_drop_ers, struct item_drop);
+ 	memset(&drop->item_data, 0, sizeof(struct item));
+diff --git a/rewrite/src/map/mob.h b/rewrite/src/map/mob.h
+index 760c204..76d25de 100644
+--- a/rewrite/src/map/mob.h
++++ b/rewrite/src/map/mob.h
+@@ -93,8 +93,14 @@ struct mob_db {
+ 	short range2,range3;
+ 	short race2;	// celest
+ 	unsigned short lv;
+-	struct { int nameid,p; } dropitem[MAX_MOB_DROP];
+-	struct { int nameid,p; } mvpitem[3];
++	struct {
++		unsigned short nameid;
++		int p;
++	} dropitem[MAX_MOB_DROP];
++	struct {
++		unsigned short nameid;
++		int p;
++	} mvpitem[3];
+ 	struct status_data status;
+ 	struct view_data vd;
+ 	int option; // Changed to int to give support to the new options. [pakpil]
+diff --git a/rewrite/src/map/npc.c b/rewrite/src/map/npc.c
+index 6ec138e..f9058ed 100644
+--- a/rewrite/src/map/npc.c
++++ b/rewrite/src/map/npc.c
+@@ -1179,7 +1179,7 @@ static int npc_buylist_sub(struct map_session_data* sd, int n, unsigned short* i
+ /*==========================================
+  * Cash Shop Buy
+  *------------------------------------------*/
+-int npc_cashshop_buy(struct map_session_data *sd, int nameid, int amount, int points)
++int npc_cashshop_buy(struct map_session_data *sd, unsigned short nameid, int amount, int points)
+ {
+ 	struct npc_data *nd = (struct npc_data *)map_id2bl(sd->npc_shopid);
+ 	struct item_data *item;
+@@ -1208,7 +1208,7 @@ int npc_cashshop_buy(struct map_session_data *sd, int nameid, int amount, int po
+ 
+ 	if(!itemdb_isstackable(nameid) && amount > 1)
+ 	{
+-		ShowWarning("Player %s (%d:%d) sent a hexed packet trying to buy %d of nonstackable item %d!\n",
++		ShowWarning("Player %s (%d:%d) sent a hexed packet trying to buy %d of nonstackable item %hu!\n",
+ 			sd->status.name, sd->status.account_id, sd->status.char_id, amount, nameid);
+ 		amount = 1;
+ 	}
+@@ -1229,7 +1229,7 @@ int npc_cashshop_buy(struct map_session_data *sd, int nameid, int amount, int po
+ 
+ 	if( (double)nd->u.shop.shop_item[i].value * amount > INT_MAX )
+ 	{
+-		ShowWarning("npc_cashshop_buy: Item '%s' (%d) price overflow attempt!\n", item->name, nameid);
++		ShowWarning("npc_cashshop_buy: Item '%s' (%hu) price overflow attempt!\n", item->name, nameid);
+ 		ShowDebug("(NPC:'%s' (%s,%d,%d), player:'%s' (%d/%d), value:%d, amount:%d)\n", nd->exname, map[nd->bl.m].name, nd->bl.x, nd->bl.y, sd->status.name, sd->status.account_id, sd->status.char_id, nd->u.shop.shop_item[i].value, amount);
+ 		return 5;
+ 	}
+@@ -1397,7 +1397,8 @@ int npc_buylist(struct map_session_data* sd, int n, unsigned short* item_list)
+ 	// process entries in buy list, one by one
+ 	for( i = 0; i < n; ++i )
+ 	{
+-		int nameid, amount, value;
++		int amount, value;
++		unsigned short nameid;
+ 
+ 		// find this entry in the shop's sell list
+ 		ARR_FIND( 0, nd->u.shop.count, j, 
+@@ -1550,7 +1551,8 @@ int npc_selllist(struct map_session_data* sd, int n, unsigned short* item_list)
+ 	// verify the sell list
+ 	for( i = 0; i < n; i++ )
+ 	{
+-		int nameid, amount, idx, value;
++		int amount, idx, value;
++		unsigned short nameid;
+ 
+ 		idx    = item_list[i*2]-2;
+ 		amount = item_list[i*2+1];
+@@ -1585,7 +1587,8 @@ int npc_selllist(struct map_session_data* sd, int n, unsigned short* item_list)
+ 	// delete items
+ 	for( i = 0; i < n; i++ )
+ 	{
+-		int nameid, amount, idx;
++		int amount, idx;
++		unsigned short nameid;
+ 
+ 		idx    = item_list[i*2]-2;
+ 		amount = item_list[i*2+1];
+@@ -2039,9 +2042,10 @@ static const char* npc_parse_shop(char* w1, char* w2, char* w3, char* w4, const
+ 	p = strchr(w4,',');
+ 	for( i = 0; i < ARRAYLENGTH(items) && p; ++i )
+ 	{
+-		int nameid, value;
++		int value;
++		unsigned short nameid;
+ 		struct item_data* id;
+-		if( sscanf(p, ",%d:%d", &nameid, &value) != 2 )
++		if( sscanf(p, ",%hu:%d", &nameid, &value) != 2 )
+ 		{
+ 			ShowError("npc_parse_shop: Invalid item definition in file '%s', line '%d'. Ignoring the rest of the line...\n * w1=%s\n * w2=%s\n * w3=%s\n * w4=%s\n", filepath, strline(buffer,start-buffer), w1, w2, w3, w4);
+ 			break;
+@@ -2049,7 +2053,7 @@ static const char* npc_parse_shop(char* w1, char* w2, char* w3, char* w4, const
+ 
+ 		if( (id = itemdb_exists(nameid)) == NULL )
+ 		{
+-			ShowWarning("npc_parse_shop: Invalid sell item in file '%s', line '%d' (id '%d').\n", filepath, strline(buffer,start-buffer), nameid);
++			ShowWarning("npc_parse_shop: Invalid sell item in file '%s', line '%d' (id '%hu').\n", filepath, strline(buffer,start-buffer), nameid);
+ 			p = strchr(p+1,',');
+ 			continue;
+ 		}
+@@ -2062,7 +2066,7 @@ static const char* npc_parse_shop(char* w1, char* w2, char* w3, char* w4, const
+ 
+ 		if( type == SHOP && value*0.75 < id->value_sell*1.24 )
+ 		{// Exploit possible: you can buy and sell back with profit
+-			ShowWarning("npc_parse_shop: Item %s [%d] discounted buying price (%d->%d) is less than overcharged selling price (%d->%d) at file '%s', line '%d'.\n",
++			ShowWarning("npc_parse_shop: Item %s [%hu] discounted buying price (%d->%d) is less than overcharged selling price (%d->%d) at file '%s', line '%d'.\n",
+ 				id->name, nameid, value, (int)(value*0.75), id->value_sell, (int)(id->value_sell*1.24), filepath, strline(buffer,start-buffer));
+ 		}
+ 		//for logs filters, atcommands and iteminfo script command
+diff --git a/rewrite/src/map/npc.h b/rewrite/src/map/npc.h
+index a512e30..99c42f7 100644
+--- a/rewrite/src/map/npc.h
++++ b/rewrite/src/map/npc.h
+@@ -20,7 +20,8 @@ struct npc_label_list {
+ 	int pos;
+ };
+ struct npc_item_list {
+-	unsigned int nameid,value;
++	unsigned short nameid;
++	unsigned int value;
+ };
+ 
+ struct npc_data {
+@@ -158,7 +159,7 @@ void npc_read_event_script(void);
+ int npc_script_event(struct map_session_data* sd, enum npce_event type);
+ 
+ int npc_duplicate4instance(struct npc_data *snd, int m);
+-int npc_cashshop_buy(struct map_session_data *sd, int nameid, int amount, int points);
++int npc_cashshop_buy(struct map_session_data *sd, unsigned short nameid, int amount, int points);
+ int npc_cashshop_buylist(struct map_session_data* sd, int n, unsigned short* item_list, int points);
+ 
+ extern struct npc_data* fake_nd;
+diff --git a/rewrite/src/map/pc.c b/rewrite/src/map/pc.c
+index a185951..6640bed 100644
+--- a/rewrite/src/map/pc.c
++++ b/rewrite/src/map/pc.c
+@@ -1003,7 +1003,8 @@ int pc_equippoint(struct map_session_data *sd,int n)
+ 
+ int pc_setinventorydata(struct map_session_data *sd)
+ {
+-	int i,id;
++	unsigned short id;
++	int i;
+ 
+ 	nullpo_ret(sd);
+ 
+@@ -1110,7 +1111,7 @@ static int pc_isAllowedCardOn(struct map_session_data *sd,int s,int eqindex,int
+ 	return( i < s ) ? 0 : 1;
+ }
+ 
+-bool pc_isequipped(struct map_session_data *sd, int nameid)
++bool pc_isequipped(struct map_session_data *sd, unsigned short nameid)
+ {
+ 	int i, j, index;
+ 
+@@ -2070,7 +2071,7 @@ int pc_disguise(struct map_session_data *sd, int class_)
+ 	return 1;
+ }
+ 
+-static int pc_bonus_autospell(struct s_autospell *spell, int max, short id, short lv, short rate, short flag, short card_id)
++static int pc_bonus_autospell(struct s_autospell *spell, int max, short id, short lv, short rate, short flag, unsigned short card_id)
+ {
+ 	int i;
+ 
+@@ -2106,7 +2107,7 @@ static int pc_bonus_autospell(struct s_autospell *spell, int max, short id, shor
+ 	return 1;
+ }
+ 
+-static int pc_bonus_autospell_onskill(struct s_autospell *spell, int max, short src_skill, short id, short lv, short rate, short card_id)
++static int pc_bonus_autospell_onskill(struct s_autospell *spell, int max, short src_skill, unsigned short id, short lv, short rate, unsigned short card_id)
+ {
+ 	int i;
+ 
+@@ -2183,7 +2184,7 @@ static int pc_bonus_addeff_onskill(struct s_addeffectonskill* effect, int max, e
+ 	return 1;
+ }
+ 
+-static int pc_bonus_item_drop(struct s_add_drop *drop, const short max, short id, short group, int race, int rate)
++static int pc_bonus_item_drop(struct s_add_drop *drop, const short max, unsigned short id, short group, int race, int rate)
+ {
+ 	int i;
+ 	//Apply config rate adjustment settings.
+@@ -3757,7 +3758,7 @@ int pc_skill(TBL_PC* sd, int id, int level, int flag)
+ int pc_insert_card(struct map_session_data* sd, int idx_card, int idx_equip)
+ {
+ 	int i;
+-	int nameid;
++	unsigned short nameid;
+ 
+ 	nullpo_ret(sd);
+ 
+@@ -3858,7 +3859,7 @@ int pc_modifysellvalue(struct map_session_data *sd,int orig_value)
+  * アイテムを買った暫ﾉ、新しいアイテム欄を使うか、
+  * 3万個制限にかかるか確認
+  *------------------------------------------*/
+-int pc_checkadditem(struct map_session_data *sd,int nameid,int amount)
++int pc_checkadditem(struct map_session_data *sd,unsigned short nameid,int amount)
+ {
+ 	int i;
+ 
+@@ -3990,7 +3991,7 @@ int pc_getzeny(struct map_session_data *sd,int zeny)
+ /*==========================================
+  * アイテムを探して、インデックスを返す
+  *------------------------------------------*/
+-int pc_search_inventory(struct map_session_data *sd,int item_id)
++int pc_search_inventory(struct map_session_data *sd,unsigned short item_id)
+ {
+ 	int i;
+ 	nullpo_retr(-1, sd);
+@@ -4056,9 +4057,11 @@ int pc_additem(struct map_session_data *sd,struct item *item_data,int amount)
+ 			return 4;
+ 
+ 		memcpy(&sd->status.inventory[i], item_data, sizeof(sd->status.inventory[0]));
+-		// clear equips field first, just in case
++		// clear equip and favorite fields first, just in case
+ 		if( item_data->equip )
+ 			sd->status.inventory[i].equip = 0;
++		if (item_data->favorite)
++			sd->status.inventory[i].favorite = 0;
+ 
+ 		sd->status.inventory[i].amount = amount;
+ 		sd->inventory_data[i] = data;
+@@ -4214,7 +4217,7 @@ int pc_takeitem(struct map_session_data *sd,struct flooritem_data *fitem)
+ int pc_isUseitem(struct map_session_data *sd,int n)
+ {
+ 	struct item_data *item;
+-	int nameid;
++	unsigned short nameid;
+ 
+ 	nullpo_ret(sd);
+ 
+@@ -4354,7 +4357,8 @@ int pc_isUseitem(struct map_session_data *sd,int n)
+ int pc_useitem(struct map_session_data *sd,int n)
+ {
+ 	unsigned int tick = gettick();
+-	int amount, i, nameid;
++	int amount, i;
++	unsigned short nameid;
+ 	struct script_code *script;
+ 
+ 	nullpo_ret(sd);
+@@ -4489,7 +4493,7 @@ int pc_useitem(struct map_session_data *sd,int n)
+ 		}
+ 		else
+ 		{// should not happen
+-			ShowError("pc_useitem: Exceeded item delay array capacity! (nameid=%d, char_id=%d)\n", nameid, sd->status.char_id);
++			ShowError("pc_useitem: Exceeded item delay array capacity! (nameid=%hu, char_id=%d)\n", nameid, sd->status.char_id);
+ 		}
+ 	}
+ 
+@@ -4590,6 +4594,8 @@ int pc_cart_additem(struct map_session_data *sd,struct item *item_data,int amoun
+ 		clif_cart_additem(sd,i,amount,0);
+ 	}
+ 
++	sd->status.cart[i].favorite = 0;/* clear */
++
+ 	sd->cart_weight += w;
+ 	clif_updatestatus(sd,SP_CARTINFO);
+ 
+@@ -5152,7 +5158,7 @@ int pc_checkskill(struct map_session_data *sd,int skill_id)
+  * 武器?更によるスキルの??チェック
+  * 引?：
+  *   struct map_session_data *sd	セッションデ?タ
+- *   int nameid						?備品ID
++ *   unsigned short nameid			?備品ID
+  * 返り値：
+  *   0		?更なし
+  *   -1		スキルを解除
+@@ -8629,7 +8635,7 @@ int pc_equipitem(struct map_session_data *sd,int n,int req_pos)
+ 	pos = pc_equippoint(sd,n); //With a few exceptions, item should go in all specified slots.
+ 
+ 	if(battle_config.battle_log)
+-		ShowInfo("equip %d(%d) %x:%x\n",sd->status.inventory[n].nameid,n,id->equip,req_pos);
++		ShowInfo("equip %hu(%d) %x:%x\n",sd->status.inventory[n].nameid,n,id->equip,req_pos);
+ 	if(!pc_isequip(sd,n) || !(pos&req_pos) || sd->status.inventory[n].equip != 0 || sd->status.inventory[n].attribute==1 ) { // [Valaris]
+ 		clif_equipitemack(sd,n,0,0);	// fail
+ 		return 0;
+diff --git a/rewrite/src/map/pc.h b/rewrite/src/map/pc.h
+index 680272a..7585564 100644
+--- a/rewrite/src/map/pc.h
++++ b/rewrite/src/map/pc.h
+@@ -79,7 +79,8 @@ struct weapon_data {
+ };
+ 
+ struct s_autospell {
+-	short id, lv, rate, card_id, flag;
++	short id, lv, rate, flag;
++	unsigned short card_id;
+ 	bool lock;  // bAutoSpellOnSkill: blocks autospell from triggering again, while being executed
+ };
+ 
+@@ -95,8 +96,9 @@ struct s_addeffectonskill {
+ 	unsigned char target;
+ };
+ 
+-struct s_add_drop { 
+-	short id, group;
++struct s_add_drop {
++	unsigned short id;
++	short group;
+ 	int race, rate;
+ };
+ 
+@@ -245,7 +247,7 @@ struct map_session_data {
+ 	unsigned int ks_floodprotect_tick; // [Kill Steal Protection]
+ 	
+ 	struct {
+-		int nameid;
++		unsigned short nameid;
+ 		unsigned int tick;
+ 	} item_delay[MAX_ITEMDELAYS]; // [Paradox924X]
+ 
+@@ -297,7 +299,7 @@ struct map_session_data {
+ 	}	add_def[MAX_PC_BONUS], add_mdef[MAX_PC_BONUS], add_mdmg[MAX_PC_BONUS];
+ 	struct s_add_drop add_drop[MAX_PC_BONUS];
+ 	struct {
+-		int nameid;
++		unsigned short nameid;
+ 		int rate;
+ 	} itemhealrate[MAX_PC_BONUS];
+ 	struct {
+@@ -719,9 +721,9 @@ int pc_warpto(struct map_session_data* sd, struct map_session_data* pl_sd);
+ int pc_recall(struct map_session_data* sd, struct map_session_data* pl_sd);
+ int pc_memo(struct map_session_data* sd, int pos);
+ 
+-int pc_checkadditem(struct map_session_data*,int,int);
++int pc_checkadditem(struct map_session_data*,unsigned short,int);
+ int pc_inventoryblank(struct map_session_data*);
+-int pc_search_inventory(struct map_session_data *sd,int item_id);
++int pc_search_inventory(struct map_session_data *sd,unsigned short item_id);
+ int pc_payzeny(struct map_session_data*,int);
+ int pc_additem(struct map_session_data*,struct item*,int);
+ int pc_getzeny(struct map_session_data*,int);
+@@ -740,7 +742,7 @@ int pc_cartitem_amount(struct map_session_data *sd,int idx,int amount);
+ int pc_takeitem(struct map_session_data*,struct flooritem_data*);
+ int pc_dropitem(struct map_session_data*,int,int);
+ 
+-bool pc_isequipped(struct map_session_data *sd, int nameid);
++bool pc_isequipped(struct map_session_data *sd, unsigned short nameid);
+ bool pc_can_Adopt(struct map_session_data *p1_sd, struct map_session_data *p2_sd, struct map_session_data *b_sd );
+ bool pc_adoption(struct map_session_data *p1_sd, struct map_session_data *p2_sd, struct map_session_data *b_sd);
+ 
+diff --git a/rewrite/src/map/pet.c b/rewrite/src/map/pet.c
+index e23a2a5..9c5ed1a 100644
+--- a/rewrite/src/map/pet.c
++++ b/rewrite/src/map/pet.c
+@@ -70,7 +70,7 @@ void pet_set_intimate(struct pet_data *pd, int value)
+ 		status_calc_pc(sd,0);
+ }
+ 
+-int pet_create_egg(struct map_session_data *sd, int item_id)
++int pet_create_egg(struct map_session_data *sd, unsigned short item_id)
+ {
+ 	int pet_id = search_petDB_index(item_id, PET_EGG);
+ 	if (pet_id < 0) return 0; //No pet egg here.
+@@ -646,7 +646,7 @@ int pet_change_name_ack(struct map_session_data *sd, char* name, int flag)
+ int pet_equipitem(struct map_session_data *sd,int index)
+ {
+ 	struct pet_data *pd;
+-	int nameid;
++	unsigned short nameid;
+ 
+ 	nullpo_retr(1, sd);
+ 	pd = sd->pd;
+@@ -683,7 +683,8 @@ int pet_equipitem(struct map_session_data *sd,int index)
+ static int pet_unequipitem(struct map_session_data *sd, struct pet_data *pd)
+ {
+ 	struct item tmp_item;
+-	int nameid,flag;
++	int flag;
++	unsigned short nameid;
+ 
+ 	if(pd->pet.equip == 0)
+ 		return 1;
+@@ -1196,7 +1197,8 @@ int read_petdb()
+ {
+ 	char* filename[] = {"pet_db.txt","pet_db2.txt"};
+ 	FILE *fp;
+-	int nameid,i,j,k; 
++	int i,j,k;
++	unsigned short nameid;
+ 
+ 	// Remove any previous scripts in case reloaddb was invoked.	
+ 	for( j = 0; j < MAX_PET_DB; j++ )
+@@ -1291,7 +1293,7 @@ int read_petdb()
+ 
+ 			if( !mobdb_checkid(nameid) )
+ 			{
+-				ShowWarning("pet_db reading: Invalid mob-class %d, pet not read.\n", nameid);
++				ShowWarning("pet_db reading: Invalid mob-class %hu, pet not read.\n", nameid);
+ 				continue;
+ 			}
+ 
+diff --git a/rewrite/src/map/pet.h b/rewrite/src/map/pet.h
+index 729fdeb..69236f7 100644
+--- a/rewrite/src/map/pet.h
++++ b/rewrite/src/map/pet.h
+@@ -100,7 +100,7 @@ struct pet_data {
+ 
+ 
+ 
+-int pet_create_egg(struct map_session_data *sd, int item_id);
++int pet_create_egg(struct map_session_data *sd, unsigned short item_id);
+ int pet_hungry_val(struct pet_data *pd);
+ void pet_set_intimate(struct pet_data *pd, int value);
+ int pet_target_check(struct map_session_data *sd,struct block_list *bl,int type);
+diff --git a/rewrite/src/map/script.c b/rewrite/src/map/script.c
+index dd4d605..9270953 100644
+--- a/rewrite/src/map/script.c
++++ b/rewrite/src/map/script.c
+@@ -5379,7 +5379,8 @@ BUILDIN_FUNC(viewpoint)
+  *------------------------------------------*/
+ BUILDIN_FUNC(countitem)
+ {
+-	int nameid, i;
++	unsigned short nameid;
++	int i;
+ 	int count = 0;
+ 	struct item_data* id = NULL;
+ 	struct script_data* data;
+@@ -5425,7 +5426,8 @@ BUILDIN_FUNC(countitem)
+  *------------------------------------------*/
+ BUILDIN_FUNC(countitem2)
+ {
+-	int nameid, iden, ref, attr, c1, c2, c3, c4;
++	unsigned short nameid;
++	int iden, ref, attr, c1, c2, c3, c4;
+ 	int count = 0;
+ 	int i;
+ 	struct item_data* id = NULL;
+@@ -5484,7 +5486,8 @@ BUILDIN_FUNC(countitem2)
+  *------------------------------------------*/
+ BUILDIN_FUNC(checkweight)
+ {
+-	int nameid, amount, slots;
++	unsigned short nameid;
++	int amount, slots;
+ 	unsigned int weight;
+ 	struct item_data* id = NULL;
+ 	struct map_session_data* sd;
+@@ -5572,7 +5575,8 @@ BUILDIN_FUNC(checkweight)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getitem)
+ {
+-	int nameid,amount,get_count,i,flag = 0;
++	unsigned short nameid;
++	int amount, get_count, i, flag = 0;
+ 	struct item it;
+ 	TBL_PC *sd;
+ 	struct script_data *data;
+@@ -5656,7 +5660,8 @@ BUILDIN_FUNC(getitem)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getitem2)
+ {
+-	int nameid,amount,get_count,i,flag = 0;
++	unsigned short nameid;
++	int amount, get_count, i, flag = 0;
+ 	int iden,ref,attr,c1,c2,c3,c4;
+ 	struct item_data *item_data;
+ 	struct item item_tmp;
+@@ -5764,7 +5769,8 @@ BUILDIN_FUNC(rentitem)
+ 	struct script_data *data;
+ 	struct item it;
+ 	int seconds;
+-	int nameid = 0, flag;
++	unsigned short nameid = 0;
++	int flag;
+ 
+ 	data = script_getdata(st,2);
+ 	get_val(st,data);
+@@ -5786,9 +5792,9 @@ BUILDIN_FUNC(rentitem)
+ 	else if( data_isint(data) )
+ 	{
+ 		nameid = conv_num(st,data);
+-		if( nameid <= 0 || !itemdb_exists(nameid) )
++		if( nameid == 0 || !itemdb_exists(nameid) )
+ 		{
+-			ShowError("buildin_rentitem: Nonexistant item %d requested.\n", nameid);
++			ShowError("buildin_rentitem: Nonexistant item %hu requested.\n", nameid);
+ 			return 1;
+ 		}
+ 	}
+@@ -5827,7 +5833,7 @@ BUILDIN_FUNC(rentitem)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getnameditem)
+ {
+-	int nameid;
++	unsigned short nameid;
+ 	struct item item_tmp;
+ 	TBL_PC *sd, *tsd;
+ 	struct script_data *data;
+@@ -5910,7 +5916,8 @@ BUILDIN_FUNC(grouprandomitem)
+  *------------------------------------------*/
+ BUILDIN_FUNC(makeitem)
+ {
+-	int nameid,amount,flag = 0;
++	unsigned short nameid;
++	int amount, flag = 0;
+ 	int x,y,m;
+ 	const char *mapname;
+ 	struct item item_tmp;
+@@ -6159,7 +6166,7 @@ BUILDIN_FUNC(delitem)
+ 		it.nameid = conv_num(st,data);// <item id>
+ 		if( !itemdb_exists( it.nameid ) )
+ 		{
+-			ShowError("script:delitem: unknown item \"%d\".\n", it.nameid);
++			ShowError("script:delitem: unknown item \"%hu\".\n", it.nameid);
+ 			st->state = END;
+ 			return 1;
+ 		}
+@@ -6175,7 +6182,7 @@ BUILDIN_FUNC(delitem)
+ 		return 0;
+ 	}
+ 
+-	ShowError("script:delitem: failed to delete %d items (AID=%d item_id=%d).\n", it.amount, sd->status.account_id, it.nameid);
++	ShowError("script:delitem: failed to delete %d items (AID=%d item_id=%hu).\n", it.amount, sd->status.account_id, it.nameid);
+ 	st->state = END;
+ 	clif_scriptclose(sd, st->oid);
+ 	return 1;
+@@ -6228,7 +6235,7 @@ BUILDIN_FUNC(delitem2)
+ 		it.nameid = conv_num(st,data);// <item id>
+ 		if( !itemdb_exists( it.nameid ) )
+ 		{
+-			ShowError("script:delitem: unknown item \"%d\".\n", it.nameid);
++			ShowError("script:delitem: unknown item \"%hu\".\n", it.nameid);
+ 			st->state = END;
+ 			return 1;
+ 		}
+@@ -10922,7 +10929,7 @@ BUILDIN_FUNC(guardianinfo)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getitemname)
+ {
+-	int item_id=0;
++	unsigned short item_id=0;
+ 	struct item_data *i_data;
+ 	char *item_name;
+ 	struct script_data *data;
+@@ -10955,7 +10962,7 @@ BUILDIN_FUNC(getitemname)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getitemslots)
+ {
+-	int item_id;
++	unsigned short item_id;
+ 	struct item_data *i_data;
+ 
+ 	item_id=script_getnum(st,2);
+@@ -10993,7 +11000,7 @@ BUILDIN_FUNC(getitemslots)
+  *------------------------------------------*/
+ BUILDIN_FUNC(getiteminfo)
+ {
+-	int item_id,n;
++	unsigned short item_id,n;
+ 	int *item_arr;
+ 	struct item_data *i_data;
+ 
+@@ -11034,7 +11041,8 @@ BUILDIN_FUNC(getiteminfo)
+  *------------------------------------------*/
+ BUILDIN_FUNC(setiteminfo)
+ {
+-	int item_id,n,value;
++	unsigned short item_id;
++	int n, value;
+ 	int *item_arr;
+ 	struct item_data *i_data;
+ 
+@@ -12578,7 +12586,8 @@ BUILDIN_FUNC(unequip)
+ 
+ BUILDIN_FUNC(equip)
+ {
+-	int nameid=0,i;
++	unsigned short nameid = 0;
++	int i;
+ 	TBL_PC *sd;
+ 	struct item_data *item_data;
+ 
+@@ -12587,7 +12596,7 @@ BUILDIN_FUNC(equip)
+ 	nameid=script_getnum(st,2);
+ 	if((item_data = itemdb_exists(nameid)) == NULL)
+ 	{
+-		ShowError("wrong item ID : equipitem(%i)\n",nameid);
++		ShowError("wrong item ID : equipitem(%hu)\n",nameid);
+ 		return 1;
+ 	}
+ 	ARR_FIND( 0, MAX_INVENTORY, i, sd->status.inventory[i].nameid == nameid );
+@@ -12599,20 +12608,21 @@ BUILDIN_FUNC(equip)
+ 
+ BUILDIN_FUNC(autoequip)
+ {
+-	int nameid, flag;
++	unsigned short nameid;
++	int flag;
+ 	struct item_data *item_data;
+ 	nameid=script_getnum(st,2);
+ 	flag=script_getnum(st,3);
+ 
+ 	if( ( item_data = itemdb_exists(nameid) ) == NULL )
+ 	{
+-		ShowError("buildin_autoequip: Invalid item '%d'.\n", nameid);
++		ShowError("buildin_autoequip: Invalid item '%hu'.\n", nameid);
+ 		return 1;
+ 	}
+ 
+ 	if( !itemdb_isequip2(item_data) )
+ 	{
+-		ShowError("buildin_autoequip: Item '%d' cannot be equipped.\n", nameid);
++		ShowError("buildin_autoequip: Item '%hu' cannot be equipped.\n", nameid);
+ 		return 1;
+ 	}
+ 
+@@ -13121,7 +13131,7 @@ BUILDIN_FUNC(npcshopdelitem)
+ {
+ 	const char* npcname = script_getstr(st,2);
+ 	struct npc_data* nd = npc_name2id(npcname);
+-	unsigned int nameid;
++	unsigned short nameid;
+ 	int n, i;
+ 	int amount;
+ 	int size;
+@@ -13191,7 +13201,8 @@ BUILDIN_FUNC(npcshopattach)
+  *------------------------------------------*/
+ BUILDIN_FUNC(setitemscript)
+ {
+-	int item_id,n=0;
++	unsigned short item_id;
++	int n = 0;
+ 	const char *script;
+ 	struct item_data *i_data;
+ 	struct script_code **dstscript;
+diff --git a/rewrite/src/map/searchstore.c b/rewrite/src/map/searchstore.c
+index d1839ee..6917817 100644
+--- a/rewrite/src/map/searchstore.c
++++ b/rewrite/src/map/searchstore.c
+@@ -382,7 +382,7 @@ void searchstore_clearremote(struct map_session_data* sd)
+ 
+ 
+ /// receives results from a store-specific callback
+-bool searchstore_result(struct map_session_data* sd, int store_id, int account_id, const char* store_name, unsigned int nameid, unsigned short amount, unsigned int price, const int* card, unsigned char refine)
++bool searchstore_result(struct map_session_data* sd, int store_id, int account_id, const char* store_name, unsigned short nameid, unsigned short amount, unsigned int price, const unsigned short* card, unsigned char refine)
+ {
+ 	struct s_search_store_info_item* ssitem;
+ 
+diff --git a/rewrite/src/map/searchstore.h b/rewrite/src/map/searchstore.h
+index 0b5df7b..3765826 100644
+--- a/rewrite/src/map/searchstore.h
++++ b/rewrite/src/map/searchstore.h
+@@ -23,10 +23,10 @@ struct s_search_store_info_item
+ 	int store_id;
+ 	int account_id;
+ 	char store_name[MESSAGE_SIZE];
+-	unsigned int nameid;
++	unsigned short nameid;
+ 	unsigned short amount;
+ 	unsigned int price;
+-	int card[MAX_SLOTS];
++	unsigned short card[MAX_SLOTS];
+ 	unsigned char refine;
+ };
+ 
+@@ -52,6 +52,6 @@ void searchstore_close(struct map_session_data* sd);
+ void searchstore_click(struct map_session_data* sd, int account_id, int store_id, unsigned short nameid);
+ bool searchstore_queryremote(struct map_session_data* sd, int account_id);
+ void searchstore_clearremote(struct map_session_data* sd);
+-bool searchstore_result(struct map_session_data* sd, int store_id, int account_id, const char* store_name, unsigned int nameid, unsigned short amount, unsigned int price, const int* card, unsigned char refine);
++bool searchstore_result(struct map_session_data* sd, int store_id, int account_id, const char* store_name, unsigned short nameid, unsigned short amount, unsigned int price, const unsigned short* card, unsigned char refine);
+ 
+ #endif  // _SEARCHSTORE_H_
+diff --git a/rewrite/src/map/skill.c b/rewrite/src/map/skill.c
+index c3bc82d..55078dd 100644
+--- a/rewrite/src/map/skill.c
++++ b/rewrite/src/map/skill.c
+@@ -18403,13 +18403,13 @@ int skill_unit_move_unit_group (struct skill_unit_group *group, int m, int dx, i
+ /*==========================================
+  *
+  *------------------------------------------*/
+-int skill_can_produce_mix(struct map_session_data *sd, int nameid, int trigger, int qty)
++int skill_can_produce_mix(struct map_session_data *sd, unsigned short nameid, int trigger, int qty)
+ {
+ 	int i,j;
+ 
+ 	nullpo_ret(sd);
+ 
+-	if( nameid <= 0 )
++	if( nameid == 0 )
+ 		return 0;
+ 
+ 	for( i = 0; i < MAX_SKILL_PRODUCE_DB; i++ )
+@@ -18471,7 +18471,7 @@ int skill_can_produce_mix(struct map_session_data *sd, int nameid, int trigger,
+ /*==========================================
+  *
+  *------------------------------------------*/
+-int skill_produce_mix(struct map_session_data *sd, int skill_id, int nameid, int slot1, int slot2, int slot3, int qty)
++int skill_produce_mix(struct map_session_data *sd, int skill_id, unsigned short nameid, int slot1, int slot2, int slot3, int qty)
+ {
+ 	int slot[3];
+ 	int i,sc,ele,idx,equip,wlv = 0,make_per,flag = 0,skill_lv = 0,temp_qty;
+@@ -18999,14 +18999,14 @@ int skill_produce_mix(struct map_session_data *sd, int skill_id, int nameid, int
+ 	return 0;
+ }
+ 
+-int skill_arrow_create (struct map_session_data *sd, int nameid)
++int skill_arrow_create (struct map_session_data *sd, unsigned short nameid)
+ {
+ 	int i,j,flag,index=-1;
+ 	struct item tmp_item;
+ 
+ 	nullpo_ret(sd);
+ 
+-	if(nameid <= 0)
++	if(nameid == 0)
+ 		return 1;
+ 
+ 	for(i=0;i<MAX_SKILL_ARROW_DB;i++)
+diff --git a/rewrite/src/map/skill.h b/rewrite/src/map/skill.h
+index 3dc4a1c..2a969b5 100644
+--- a/rewrite/src/map/skill.h
++++ b/rewrite/src/map/skill.h
+@@ -202,7 +202,8 @@ enum {
+ 
+ // アイテム作成デ?タベ?ス
+ struct s_skill_produce_db {
+-	int nameid, trigger;
++	unsigned short nameid;
++	int trigger;
+ 	int req_skill,req_skill_lv,itemlv;
+ 	int mat_id[MAX_PRODUCE_RESOURCE],mat_amount[MAX_PRODUCE_RESOURCE];
+ };
+@@ -210,7 +211,8 @@ extern struct s_skill_produce_db skill_produce_db[MAX_SKILL_PRODUCE_DB];
+ 
+ // 矢作成デ?タベ?ス
+ struct s_skill_arrow_db {
+-	int nameid, trigger;
++	unsigned short nameid;
++	int trigger;
+ 	int cre_id[MAX_ARROW_RESOURCE],cre_amount[MAX_ARROW_RESOURCE];
+ };
+ extern struct s_skill_arrow_db skill_arrow_db[MAX_SKILL_ARROW_DB];
+@@ -371,10 +373,10 @@ int skill_blockpc_end(int tid, unsigned int tick, int id, intptr data);
+ int skill_chastle_mob_changetarget(struct block_list *bl,va_list ap);
+ 
+ // アイテム作成
+-int skill_can_produce_mix( struct map_session_data *sd, int nameid, int trigger, int qty);
+-int skill_produce_mix( struct map_session_data *sd, int skill_id, int nameid, int slot1, int slot2, int slot3, int qty );
++int skill_can_produce_mix( struct map_session_data *sd, unsigned short nameid, int trigger, int qty);
++int skill_produce_mix( struct map_session_data *sd, int skill_id, unsigned short nameid, int slot1, int slot2, int slot3, int qty );
+ 
+-int skill_arrow_create( struct map_session_data *sd,int nameid);
++int skill_arrow_create( struct map_session_data *sd,unsigned short nameid);
+ int skill_poisoningweapon( struct map_session_data *sd, int nameid);
+ int skill_magicdecoy( struct map_session_data *sd, int nameid);
+ int skill_spellbook( struct map_session_data *sd, int nameid);	// Warlock Spellbooks. [LimitLine]
+diff --git a/rewrite/src/map/storage.c b/rewrite/src/map/storage.c
+index 4eb1beb..22f7041 100644
+--- a/rewrite/src/map/storage.c
++++ b/rewrite/src/map/storage.c
+@@ -394,7 +394,7 @@ int guild_storage_additem(struct map_session_data* sd, struct guild_storage* sto
+ 	nullpo_retr(1, stor);
+ 	nullpo_retr(1, item_data);
+ 
+-	if(item_data->nameid <= 0 || amount <= 0)
++	if(item_data->nameid == 0 || amount <= 0)
+ 		return 1;
+ 
+ 	data = itemdb_search(item_data->nameid);
+@@ -470,7 +470,7 @@ int storage_guild_storageadd(struct map_session_data* sd, int index, int amount)
+ 	if( index<0 || index>=MAX_INVENTORY )
+ 		return 0;
+ 
+-	if( sd->status.inventory[index].nameid <= 0 )
++	if( sd->status.inventory[index].nameid == 0 )
+ 		return 0;
+ 	
+ 	if( amount < 1 || amount > sd->status.inventory[index].amount )
+@@ -497,7 +497,7 @@ int storage_guild_storageget(struct map_session_data* sd, int index, int amount)
+ 	if(index<0 || index>=MAX_GUILD_STORAGE)
+ 		return 0;
+ 
+-	if(stor->items[index].nameid <= 0)
++	if(stor->items[index].nameid == 0)
+ 		return 0;
+ 	
+ 	if(amount < 1 || amount > stor->items[index].amount)
+@@ -525,7 +525,7 @@ int storage_guild_storageaddfromcart(struct map_session_data* sd, int index, int
+ 	if( index < 0 || index >= MAX_CART )
+ 		return 0;
+ 
+-	if( sd->status.cart[index].nameid <= 0 )
++	if( sd->status.cart[index].nameid == 0 )
+ 		return 0;
+ 	
+ 	if( amount < 1 || amount > sd->status.cart[index].amount )
+@@ -550,7 +550,7 @@ int storage_guild_storagegettocart(struct map_session_data* sd, int index, int a
+ 	if(index<0 || index>=MAX_GUILD_STORAGE)
+ 	  	return 0;
+ 	
+-	if(stor->items[index].nameid<=0)
++	if(stor->items[index].nameid==0)
+ 		return 0;
+ 	
+ 	if(amount < 1 || amount > stor->items[index].amount)
