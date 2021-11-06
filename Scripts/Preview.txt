@@ -1,0 +1,67 @@
+//===== 15peaces RO Scripts ==================================
+//= Preview NPC
+//===== By: ================================================== 
+//= 15peaces
+//===== Current Version: ===================================== 
+//= 1.1
+//===== Compatible With: ===================================== 
+//= 15-3athena Project 
+//= 3ceam, eAthena
+//===== Description: ========================================= 
+//= Preview NPC to preview headgears without the need of
+//= creating the item.
+//===== Additional Comments: =================================
+//= 1.0 First version. Rewrite. [15peaces]
+//= 1.1 Added support for costume headgears. [15peaces] 
+//============================================================ 
+
+prt_in,129,36,5	script	Preview	813,{
+	//save current look for later
+	set @bottomview, getlook(3);
+	set @topview, getlook(4);
+	set @midview, getlook(5);
+
+	while(.@end == 0) {
+		mes "Welcome to the preview NPC";
+		mes "Do you want to see an item by id or by name?";
+		next;
+		switch(prompt("Got the ID:Got the name:cancel")) {
+			case 1:
+				mes "Please input an itemID you would like to preview";
+				next;
+				input @itemid;
+				break;
+			case 2:
+				mes "Please input an item name you would like to preview";
+				next;
+				input @name$;
+				searchitem @matches[0],@name$;
+				set @itemid, @matches[0];
+				break;
+			default:
+				set .@end,1;
+		}
+		//modifies char's look based on item
+		set @equip, getiteminfo(@itemid, 5);
+		set @view, getiteminfo(@itemid, 11);	
+
+		if(@equip != -1 && @view > 0) {
+			//note: yes...i'm using atcommand here cause for some reason 
+			//      'setlook' has permanent effects...last time i checked at least
+			if(@equip & 1 || @equip & 4096)
+				atcommand "@changelook 3 " + @view;
+			if(@equip & 256 || @equip & 1024)
+				atcommand "@changelook 1 " + @view;
+			if(@equip & 512 || @equip & 2048) 
+				atcommand "@changelook 2 " + @view;
+		} else {
+			mes "Unable to preview. Resetting...";
+			next;
+		}
+	}
+	atcommand "@changelook 1 " + @topview;
+	atcommand "@changelook 2 " + @midview;
+	atcommand "@changelook 3 " + @bottomview;
+	mes "Goodbye.";
+	close;
+}
